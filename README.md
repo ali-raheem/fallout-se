@@ -1,26 +1,68 @@
 # Fallout Save Editor
 
-Fallout-se is a modern cross-platform, open source, save file parsers and editor for fallout 1 and 2.
+`fallout-se` aims to be a modern, cross-platform, and open source save editor for Fallout 1 and 2.
 
-I started this project because the most popular save file editor, [Fallache](https://www.nma-fallout.com/resources/falche-fallout-1-editor.15/), is Windows only, closed source and appears unmaintained as far as I can tell.
+I started this project because the most popular save file editor, [Falche](https://www.nma-fallout.com/resources/falche-fallout-1-editor.15/), is Windows-only, closed source, and appears unmaintained.
 
-I have also found [ultimate Fallout 1 & 2 save file editor](https://github.com/nousrnam/F12se) which is open source, but still not cross platform (it has Windows XP support though :D).
+I also found [Ultimate Fallout 1 & 2 Save File Editor (F12se)](https://github.com/nousrnam/F12se), which is open source but still Windows-focused.
 
-I'm starting with Fallout 1 and I'll add functionality as I work through Fallout 2, but you can send me your save files (if they don't dump properly). But it's limited because I only have my own saves to work from which I diversified a bit with Fallache.
+This project is still a work in progress. If a save does not parse or dump correctly, please submit the file (or a minimal repro) so support can be improved.
 
 ## Project Goals
-- Parity with the famous Fallache.
-- Library backend with even more features.
-- TUI primarily (for that Fallout vibe).
-- GUI for the plebs.
+- Parity with Falche where practical.
+- Solid core library first.
+- TUI and GUI frontends on top of the same core API.
 
-## Features
+## Current Features
 
 ### Working
-- Basic dumping SAVE.DAT for Fallout 1 and 2
+- Parse and dump `SAVE.DAT` for Fallout 1 and Fallout 2.
+- Query fields from CLI: `--name`, `--description`, `--gender`, `--age`, `--level`, `--xp`, `--karma`, `--reputation`, `--skill-points`, `--map`, `--game-date`, `--save-date`.
+- JSON output with `--json`.
+- Safe edits written to a new file via `--output`:
+  - `--set-gender`
+  - `--set-age`
+  - `--set-level`
+  - `--set-xp`
+  - `--set-skill-points`
+  - `--set-karma`
+  - `--set-reputation`
+- Confirmed working in Fallout 1: `--set-gender` and `--set-skill-points` (for example setting skill points to `10`).
 
-### Not Working
-- Any editing :)
+### Not Working Yet
+- Advanced edits (inventory, object graph, perks/traits, world state).
+
+## CLI Commands
+
+Read selected fields:
+
+```bash
+fallout-se --gender --level --xp path/to/SAVE.DAT
+```
+
+Force game detection hint (symmetric flags):
+
+```bash
+fallout-se --fallout1 --gender path/to/SAVE.DAT   # alias: --fo1
+fallout-se --fallout2 --gender path/to/SAVE.DAT   # alias: --fo2
+```
+
+JSON output:
+
+```bash
+fallout-se --json path/to/SAVE.DAT
+```
+
+Edit Fallout 1 (example: change gender and set 10 skill points):
+
+```bash
+fallout-se --fallout1 \
+  --set-gender male \
+  --set-skill-points 10 \
+  --output path/to/SAVE_EDITED.DAT \
+  --gender --skill-points \
+  path/to/SAVE.DAT
+```
 
 ## License
-Apache and MIT for maximal flexibility.
+Dual-licensed under MIT OR Apache-2.0.

@@ -15,9 +15,26 @@ use sections::{
     parse_game_global_vars, parse_kill_counts, parse_map_file_list, parse_pc_stats, parse_perks,
     parse_player_combat_id, parse_player_object, parse_tagged_skills,
 };
-use types::{KILL_TYPE_COUNT, PERK_COUNT, TAGGED_SKILL_COUNT};
+use types::{KILL_TYPE_COUNT, PERK_COUNT, SAVEABLE_STAT_COUNT, SKILL_COUNT, TAGGED_SKILL_COUNT};
 
+const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
+const CRITTER_PROTO_BASE_STATS_OFFSET: usize = 8;
+const I32_WIDTH: usize = 4;
+const CRITTER_PROTO_AGE_OFFSET: usize =
+    CRITTER_PROTO_BASE_STATS_OFFSET + STAT_AGE_INDEX * I32_WIDTH;
+const GENDER_OFFSET_IN_HANDLER6: usize =
+    CRITTER_PROTO_BASE_STATS_OFFSET + STAT_GENDER_INDEX * I32_WIDTH;
+const CRITTER_PROTO_EXPERIENCE_OFFSET: usize = CRITTER_PROTO_BASE_STATS_OFFSET
+    + SAVEABLE_STAT_COUNT * I32_WIDTH
+    + SAVEABLE_STAT_COUNT * I32_WIDTH
+    + SKILL_COUNT * I32_WIDTH
+    + I32_WIDTH;
+const PC_STATS_UNSPENT_SKILL_POINTS_OFFSET: usize = 0;
+const PC_STATS_LEVEL_OFFSET: usize = I32_WIDTH;
+const PC_STATS_EXPERIENCE_OFFSET: usize = I32_WIDTH * 2;
+const PC_STATS_REPUTATION_OFFSET: usize = I32_WIDTH * 3;
+const PC_STATS_KARMA_OFFSET: usize = I32_WIDTH * 4;
 
 #[derive(Debug)]
 pub struct SaveGame {
@@ -41,9 +58,10 @@ pub struct Document {
     pub save: SaveGame,
     layout: FileLayout,
     section_blobs: Vec<SectionBlob>,
+    original_section_blobs: Vec<SectionBlob>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SectionBlob {
     bytes: Vec<u8>,
 }
@@ -102,10 +120,13 @@ impl Document {
         };
         layout.validate()?;
 
+        let original_section_blobs = capture.blobs.clone();
+
         Ok(Self {
             save,
             layout,
             section_blobs: capture.blobs,
+            original_section_blobs,
         })
     }
 
@@ -114,28 +135,147 @@ impl Document {
     }
 
     pub fn supports_editing(&self) -> bool {
-        false
+        true
     }
 
     pub fn to_bytes_unmodified(&self) -> io::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(self.layout.file_len);
-        for blob in &self.section_blobs {
-            out.extend_from_slice(&blob.bytes);
-        }
-
-        if out.len() != self.layout.file_len {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "unmodified emit length mismatch: got {}, expected {}",
-                    out.len(),
-                    self.layout.file_len
-                ),
-            ));
-        }
-
-        Ok(out)
+        emit_from_blobs(
+            &self.original_section_blobs,
+            self.layout.file_len,
+            "unmodified",
+        )
     }
+
+    pub fn to_bytes_modified(&self) -> io::Result<Vec<u8>> {
+        emit_from_blobs(&self.section_blobs, self.layout.file_len, "modified")
+    }
+
+    pub fn set_age(&mut self, age: i32) -> io::Result<()> {
+        self.patch_handler6_i32(CRITTER_PROTO_AGE_OFFSET, age, "age")?;
+        self.save.critter_data.base_stats[STAT_AGE_INDEX] = age;
+        Ok(())
+    }
+
+    pub fn set_gender(&mut self, gender: Gender) -> io::Result<()> {
+        let raw = gender.raw();
+        self.patch_handler6_i32(GENDER_OFFSET_IN_HANDLER6, raw, "gender")?;
+        self.save.critter_data.base_stats[STAT_GENDER_INDEX] = raw;
+        self.save.gender = Gender::from_raw(raw);
+        Ok(())
+    }
+
+    pub fn set_level(&mut self, level: i32) -> io::Result<()> {
+        self.patch_handler13_i32(PC_STATS_LEVEL_OFFSET, level, "level")?;
+        self.save.pc_stats.level = level;
+        Ok(())
+    }
+
+    pub fn set_experience(&mut self, experience: i32) -> io::Result<()> {
+        self.patch_handler6_i32(CRITTER_PROTO_EXPERIENCE_OFFSET, experience, "experience")?;
+        self.patch_handler13_i32(PC_STATS_EXPERIENCE_OFFSET, experience, "experience")?;
+        self.save.critter_data.experience = experience;
+        self.save.pc_stats.experience = experience;
+        Ok(())
+    }
+
+    pub fn set_skill_points(&mut self, skill_points: i32) -> io::Result<()> {
+        self.patch_handler13_i32(
+            PC_STATS_UNSPENT_SKILL_POINTS_OFFSET,
+            skill_points,
+            "skill points",
+        )?;
+        self.save.pc_stats.unspent_skill_points = skill_points;
+        Ok(())
+    }
+
+    pub fn set_reputation(&mut self, reputation: i32) -> io::Result<()> {
+        self.patch_handler13_i32(PC_STATS_REPUTATION_OFFSET, reputation, "reputation")?;
+        self.save.pc_stats.reputation = reputation;
+        Ok(())
+    }
+
+    pub fn set_karma(&mut self, karma: i32) -> io::Result<()> {
+        self.patch_handler13_i32(PC_STATS_KARMA_OFFSET, karma, "karma")?;
+        self.save.pc_stats.karma = karma;
+        Ok(())
+    }
+
+    fn patch_handler6_i32(&mut self, offset: usize, raw: i32, field: &str) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Handler(6))?;
+        patch_i32_in_blob(blob, offset, raw, "handler 6", field)
+    }
+
+    fn patch_handler13_i32(&mut self, offset: usize, raw: i32, field: &str) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Handler(13))?;
+        patch_i32_in_blob(blob, offset, raw, "handler 13", field)
+    }
+
+    fn section_blob_mut(&mut self, id: SectionId) -> io::Result<&mut SectionBlob> {
+        let section_index = self
+            .layout
+            .sections
+            .iter()
+            .position(|section| section.id == id)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("missing section {id:?}"),
+                )
+            })?;
+
+        self.section_blobs.get_mut(section_index).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "section blob list does not match recorded layout",
+            )
+        })
+    }
+}
+
+fn patch_i32_in_blob(
+    blob: &mut SectionBlob,
+    offset: usize,
+    raw: i32,
+    section_label: &str,
+    field_label: &str,
+) -> io::Result<()> {
+    if blob.bytes.len() < offset + I32_WIDTH {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{section_label} too short for {field_label} patch: len={}, need at least {}",
+                blob.bytes.len(),
+                offset + I32_WIDTH
+            ),
+        ));
+    }
+
+    blob.bytes[offset..offset + I32_WIDTH].copy_from_slice(&raw.to_be_bytes());
+    Ok(())
+}
+
+fn emit_from_blobs(
+    blobs: &[SectionBlob],
+    expected_len: usize,
+    mode_label: &str,
+) -> io::Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(expected_len);
+    for blob in blobs {
+        out.extend_from_slice(&blob.bytes);
+    }
+
+    if out.len() != expected_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{mode_label} emit length mismatch: got {}, expected {}",
+                out.len(),
+                expected_len
+            ),
+        ));
+    }
+
+    Ok(out)
 }
 
 fn parse_internal<R: Read + Seek>(

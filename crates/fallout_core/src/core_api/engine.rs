@@ -4,12 +4,15 @@ use crate::fallout1;
 use crate::fallout1::types as f1_types;
 use crate::fallout2;
 use crate::fallout2::types as f2_types;
+use crate::gender::Gender;
 
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
     Capabilities, CapabilityIssue, DateParts, Game, KillCountEntry, PerkEntry, SkillEntry,
     Snapshot, StatEntry,
 };
+
+const STAT_AGE_INDEX: usize = 33;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;
@@ -249,6 +252,13 @@ impl Session {
         }
     }
 
+    pub fn age(&self) -> i32 {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => doc.save.critter_data.base_stats[STAT_AGE_INDEX],
+            LoadedDocument::Fallout2(doc) => doc.save.critter_data.base_stats[STAT_AGE_INDEX],
+        }
+    }
+
     pub fn to_bytes_unmodified(&self) -> Result<Vec<u8>, CoreError> {
         match &self.document {
             LoadedDocument::Fallout1(doc) => doc.to_bytes_unmodified(),
@@ -260,6 +270,128 @@ impl Session {
                 format!("failed to emit unmodified bytes: {e}"),
             )
         })
+    }
+
+    pub fn to_bytes_modified(&self) -> Result<Vec<u8>, CoreError> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => doc.to_bytes_modified(),
+            LoadedDocument::Fallout2(doc) => doc.to_bytes_modified(),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::Io,
+                format!("failed to emit modified bytes: {e}"),
+            )
+        })
+    }
+
+    pub fn set_gender(&mut self, gender: Gender) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_gender(gender),
+            LoadedDocument::Fallout2(doc) => doc.set_gender(gender),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set gender: {e}"),
+            )
+        })?;
+
+        self.snapshot.gender = gender;
+        Ok(())
+    }
+
+    pub fn set_age(&mut self, age: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_age(age),
+            LoadedDocument::Fallout2(doc) => doc.set_age(age),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set age: {e}"),
+            )
+        })
+    }
+
+    pub fn set_level(&mut self, level: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_level(level),
+            LoadedDocument::Fallout2(doc) => doc.set_level(level),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set level: {e}"),
+            )
+        })?;
+
+        self.snapshot.level = level;
+        Ok(())
+    }
+
+    pub fn set_experience(&mut self, experience: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_experience(experience),
+            LoadedDocument::Fallout2(doc) => doc.set_experience(experience),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set experience: {e}"),
+            )
+        })?;
+
+        self.snapshot.experience = experience;
+        Ok(())
+    }
+
+    pub fn set_skill_points(&mut self, skill_points: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_skill_points(skill_points),
+            LoadedDocument::Fallout2(doc) => doc.set_skill_points(skill_points),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set skill points: {e}"),
+            )
+        })?;
+
+        self.snapshot.unspent_skill_points = skill_points;
+        Ok(())
+    }
+
+    pub fn set_reputation(&mut self, reputation: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_reputation(reputation),
+            LoadedDocument::Fallout2(doc) => doc.set_reputation(reputation),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set reputation: {e}"),
+            )
+        })?;
+
+        self.snapshot.reputation = reputation;
+        Ok(())
+    }
+
+    pub fn set_karma(&mut self, karma: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_karma(karma),
+            LoadedDocument::Fallout2(doc) => doc.set_karma(karma),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set karma: {e}"),
+            )
+        })?;
+
+        self.snapshot.karma = karma;
+        Ok(())
     }
 }
 

@@ -150,7 +150,7 @@ pub fn parse_player_object<R: Read + Seek>(
 
 // --- Handler 6: Critter Proto Data ---
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CritterProtoData {
     pub sneak_working: i32,
     pub flags: i32,

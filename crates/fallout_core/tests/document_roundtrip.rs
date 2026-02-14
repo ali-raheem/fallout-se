@@ -31,7 +31,7 @@ fn fallout1_document_roundtrip_slot01() {
     doc.layout()
         .validate()
         .expect("invalid Fallout 1 section layout");
-    assert!(!doc.supports_editing());
+    assert!(doc.supports_editing());
     assert_eq!(doc.save.header.character_name, "Clairey");
 
     let emitted = doc
@@ -51,7 +51,7 @@ fn fallout2_document_roundtrip_slot01() {
     doc.layout()
         .validate()
         .expect("invalid Fallout 2 section layout");
-    assert!(!doc.supports_editing());
+    assert!(doc.supports_editing());
     assert_eq!(doc.save.header.character_name, "Narg");
 
     let emitted = doc

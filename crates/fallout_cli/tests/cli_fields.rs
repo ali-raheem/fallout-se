@@ -1,6 +1,11 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use fallout_core::fallout1::SaveGame as Fallout1SaveGame;
+use fallout_core::fallout2::SaveGame as Fallout2SaveGame;
 use serde_json::Value;
 
 fn workspace_root() -> PathBuf {
@@ -23,6 +28,14 @@ fn run_cli(args: &[&str]) -> std::process::Output {
         .args(args)
         .output()
         .expect("failed to run fallout-se CLI")
+}
+
+fn temp_output_path(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("{prefix}_{}_{}.dat", std::process::id(), nanos))
 }
 
 #[test]
@@ -118,6 +131,28 @@ fn cli_supports_legacy_fo2_alias() {
 }
 
 #[test]
+fn cli_supports_legacy_fallout1_flag() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--fallout1", "--gender", &path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "gender=Female");
+}
+
+#[test]
+fn cli_supports_legacy_fo1_alias() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--fo1", "--gender", &path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "gender=Female");
+}
+
+#[test]
 fn cli_outputs_selected_fields_as_json() {
     let path = fallout2_save_path(1);
     let path = path.to_string_lossy().to_string();
@@ -147,4 +182,134 @@ fn cli_outputs_default_summary_as_json() {
     assert_eq!(json["level"], 10);
     assert_eq!(json["xp"], 50700);
     assert!(json.get("global_var_count").is_some());
+}
+
+#[test]
+fn cli_set_gender_requires_output_path() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--set-gender", "male", &path]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--set-* flags require --output"));
+}
+
+#[test]
+fn cli_output_requires_set_gender() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let out_path = temp_output_path("fallout_se_output_without_set");
+    let out_path_s = out_path.to_string_lossy().to_string();
+    let output = run_cli(&["--output", &out_path_s, &path]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--output requires at least one --set-* flag"));
+}
+
+#[test]
+fn cli_can_set_gender_and_write_output_file() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let out_path = temp_output_path("fallout_se_set_gender");
+    let out_path_s = out_path.to_string_lossy().to_string();
+
+    let output = run_cli(&[
+        "--set-gender",
+        "male",
+        "--output",
+        &out_path_s,
+        "--gender",
+        &path,
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "gender=Male");
+
+    let file = File::open(&out_path).expect("expected output file to be created");
+    let save = Fallout1SaveGame::parse(BufReader::new(file))
+        .expect("output file should parse as Fallout 1 save");
+    assert_eq!(save.gender.to_string(), "Male");
+
+    let _ = std::fs::remove_file(&out_path);
+}
+
+#[test]
+fn cli_can_set_age_level_xp_and_write_output_file() {
+    let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let out_path = temp_output_path("fallout_se_set_age_level_xp");
+    let out_path_s = out_path.to_string_lossy().to_string();
+
+    let output = run_cli(&[
+        "--set-age",
+        "21",
+        "--set-level",
+        "5",
+        "--set-xp",
+        "4321",
+        "--output",
+        &out_path_s,
+        "--age",
+        "--level",
+        "--xp",
+        &path,
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines, vec!["age=21", "level=5", "xp=4321"]);
+
+    let file = File::open(&out_path).expect("expected output file to be created");
+    let save = Fallout2SaveGame::parse(BufReader::new(file))
+        .expect("output file should parse as Fallout 2 save");
+    assert_eq!(save.critter_data.base_stats[33], 21);
+    assert_eq!(save.pc_stats.level, 5);
+    assert_eq!(save.pc_stats.experience, 4321);
+    assert_eq!(save.critter_data.experience, 4321);
+
+    let _ = std::fs::remove_file(&out_path);
+}
+
+#[test]
+fn cli_can_set_skill_points_karma_reputation_and_write_output_file() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let out_path = temp_output_path("fallout_se_set_secondary_pc_stats");
+    let out_path_s = out_path.to_string_lossy().to_string();
+
+    let output = run_cli(&[
+        "--set-skill-points",
+        "88",
+        "--set-karma",
+        "1234",
+        "--set-reputation",
+        "-5",
+        "--output",
+        &out_path_s,
+        "--skill-points",
+        "--karma",
+        "--reputation",
+        &path,
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(
+        lines,
+        vec!["karma=1234", "reputation=-5", "skill_points=88"]
+    );
+
+    let file = File::open(&out_path).expect("expected output file to be created");
+    let save = Fallout1SaveGame::parse(BufReader::new(file))
+        .expect("output file should parse as Fallout 1 save");
+    assert_eq!(save.pc_stats.unspent_skill_points, 88);
+    assert_eq!(save.pc_stats.karma, 1234);
+    assert_eq!(save.pc_stats.reputation, -5);
+
+    let _ = std::fs::remove_file(&out_path);
 }
