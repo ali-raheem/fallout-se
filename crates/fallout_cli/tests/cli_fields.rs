@@ -1,25 +1,34 @@
+use std::path::PathBuf;
 use std::process::Command;
 
 use serde_json::Value;
 
-fn fallout1_save_path(slot: u32) -> String {
-    format!("tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT", slot)
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn fallout2_save_path(slot: u32) -> String {
-    format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot)
+fn fallout1_save_path(slot: u32) -> PathBuf {
+    workspace_root().join(format!(
+        "tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT",
+        slot
+    ))
+}
+
+fn fallout2_save_path(slot: u32) -> PathBuf {
+    workspace_root().join(format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot))
 }
 
 fn run_cli(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_fallout_se"))
+    Command::new(env!("CARGO_BIN_EXE_fallout-se"))
         .args(args)
         .output()
-        .expect("failed to run fallout_se CLI")
+        .expect("failed to run fallout-se CLI")
 }
 
 #[test]
 fn cli_prints_single_gender_field() {
     let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--gender", &path]);
     assert!(output.status.success());
 
@@ -30,6 +39,7 @@ fn cli_prints_single_gender_field() {
 #[test]
 fn cli_prints_multiple_requested_fields_in_fixed_order() {
     let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--gender", "--level", "--xp", &path]);
     assert!(output.status.success());
 
@@ -41,6 +51,7 @@ fn cli_prints_multiple_requested_fields_in_fixed_order() {
 #[test]
 fn cli_prints_age_field() {
     let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--age", &path]);
     assert!(output.status.success());
 
@@ -54,6 +65,7 @@ fn cli_prints_age_field() {
 #[test]
 fn cli_without_field_flags_keeps_verbose_dump() {
     let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&[&path]);
     assert!(output.status.success());
 
@@ -64,6 +76,7 @@ fn cli_without_field_flags_keeps_verbose_dump() {
 #[test]
 fn cli_rejects_wrong_game_hint() {
     let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--game", "1", &path]);
     assert!(!output.status.success());
 
@@ -74,6 +87,7 @@ fn cli_rejects_wrong_game_hint() {
 #[test]
 fn cli_auto_detects_fallout2_without_hint() {
     let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&[&path]);
     assert!(output.status.success());
 
@@ -84,6 +98,7 @@ fn cli_auto_detects_fallout2_without_hint() {
 #[test]
 fn cli_supports_legacy_fallout2_flag() {
     let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--fallout2", "--gender", &path]);
     assert!(output.status.success());
 
@@ -94,6 +109,7 @@ fn cli_supports_legacy_fallout2_flag() {
 #[test]
 fn cli_supports_legacy_fo2_alias() {
     let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--fo2", "--gender", &path]);
     assert!(output.status.success());
 
@@ -104,6 +120,7 @@ fn cli_supports_legacy_fo2_alias() {
 #[test]
 fn cli_outputs_selected_fields_as_json() {
     let path = fallout2_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--json", "--gender", "--level", "--xp", &path]);
     assert!(output.status.success());
 
@@ -118,6 +135,7 @@ fn cli_outputs_selected_fields_as_json() {
 #[test]
 fn cli_outputs_default_summary_as_json() {
     let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
     let output = run_cli(&["--json", &path]);
     assert!(output.status.success());
 

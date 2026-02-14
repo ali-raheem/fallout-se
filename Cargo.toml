@@ -1,12 +1,16 @@
-[package]
-name = "fallout_se"
+[workspace]
+members = [
+    "crates/fallout_core",
+    "crates/fallout_cli",
+    "crates/fallout_tui",
+    "crates/fallout_gui",
+]
+default-members = ["crates/fallout_core", "crates/fallout_cli"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.1"
 edition = "2024"
 authors = ["Ali Raheem"]
 repository = "https://github.com/ali-raheem/fallout-se"
 license = "MIT OR Apache-2.0"
-description = "Save File Editor for Fallout 1 & 2"
-
-[dependencies]
-clap = { version = "4", features = ["derive"] }
-serde_json = "1"

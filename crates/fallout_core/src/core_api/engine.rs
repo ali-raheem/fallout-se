@@ -1,6 +1,4 @@
-use std::fs;
 use std::io::Cursor;
-use std::path::Path;
 
 use crate::fallout1;
 use crate::fallout1::types as f1_types;
@@ -33,22 +31,6 @@ pub struct Session {
 impl Engine {
     pub fn new() -> Self {
         Self
-    }
-
-    pub fn open_path<P: AsRef<Path>>(
-        &self,
-        path: P,
-        hint: Option<Game>,
-    ) -> Result<Session, CoreError> {
-        let path_ref = path.as_ref();
-        let bytes = fs::read(path_ref).map_err(|e| {
-            CoreError::new(
-                CoreErrorCode::Io,
-                format!("failed to read {}: {e}", path_ref.display()),
-            )
-        })?;
-
-        self.open_bytes(bytes, hint)
     }
 
     pub fn open_bytes<B: AsRef<[u8]>>(

@@ -1,14 +1,14 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::Parser;
-use fallout_se::core_api::{Engine, Game as CoreGame, Session};
-use fallout_se::fallout1::SaveGame as Fallout1SaveGame;
-use fallout_se::fallout1::types::{KILL_TYPE_NAMES, PERK_NAMES, SKILL_NAMES, STAT_NAMES};
-use fallout_se::fallout2::SaveGame as Fallout2SaveGame;
-use fallout_se::fallout2::types::{
+use fallout_core::core_api::{Engine, Game as CoreGame, Session};
+use fallout_core::fallout1::SaveGame as Fallout1SaveGame;
+use fallout_core::fallout1::types::{KILL_TYPE_NAMES, PERK_NAMES, SKILL_NAMES, STAT_NAMES};
+use fallout_core::fallout2::SaveGame as Fallout2SaveGame;
+use fallout_core::fallout2::types::{
     KILL_TYPE_NAMES as KILL_TYPE_NAMES_F2, PERK_NAMES as PERK_NAMES_F2,
     SKILL_NAMES as SKILL_NAMES_F2, STAT_NAMES as STAT_NAMES_F2,
 };
@@ -276,8 +276,13 @@ fn main() {
         })
         .map(to_core_game);
 
+    let bytes = fs::read(&cli.path).unwrap_or_else(|e| {
+        eprintln!("Error reading {}: {e}", cli.path.display());
+        process::exit(1);
+    });
+
     let engine = Engine::new();
-    let session = engine.open_path(&cli.path, game_hint).unwrap_or_else(|e| {
+    let session = engine.open_bytes(bytes, game_hint).unwrap_or_else(|e| {
         eprintln!("Error parsing save file: {}", cli.path.display());
         eprintln!("  {}", e);
         process::exit(1);

@@ -1,38 +1,47 @@
 use std::fs::{self, File};
 use std::io::BufReader;
+use std::path::PathBuf;
 
-use fallout_se::core_api::{CapabilityIssue, CoreErrorCode, Engine, Game};
-use fallout_se::{fallout1, fallout2};
+use fallout_core::core_api::{CapabilityIssue, CoreErrorCode, Engine, Game};
+use fallout_core::{fallout1, fallout2};
 
-fn fallout1_save_path(slot: u32) -> String {
-    format!("tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT", slot)
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn fallout2_save_path(slot: u32) -> String {
-    format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot)
+fn fallout1_save_path(slot: u32) -> PathBuf {
+    workspace_root().join(format!(
+        "tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT",
+        slot
+    ))
+}
+
+fn fallout2_save_path(slot: u32) -> PathBuf {
+    workspace_root().join(format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot))
 }
 
 fn load_fallout1_save(slot: u32) -> fallout1::SaveGame {
     let path = fallout1_save_path(slot);
-    let file = File::open(&path).unwrap_or_else(|e| panic!("failed to open {}: {}", path, e));
+    let file = File::open(&path).unwrap_or_else(|e| panic!("failed to open {:?}: {}", path, e));
     fallout1::SaveGame::parse(BufReader::new(file))
-        .unwrap_or_else(|e| panic!("failed to parse {}: {}", path, e))
+        .unwrap_or_else(|e| panic!("failed to parse {:?}: {}", path, e))
 }
 
 fn load_fallout2_save(slot: u32) -> fallout2::SaveGame {
     let path = fallout2_save_path(slot);
-    let file = File::open(&path).unwrap_or_else(|e| panic!("failed to open {}: {}", path, e));
+    let file = File::open(&path).unwrap_or_else(|e| panic!("failed to open {:?}: {}", path, e));
     fallout2::SaveGame::parse(BufReader::new(file))
-        .unwrap_or_else(|e| panic!("failed to parse {}: {}", path, e))
+        .unwrap_or_else(|e| panic!("failed to parse {:?}: {}", path, e))
 }
 
 #[test]
 fn engine_auto_detects_fallout1() {
     let engine = Engine::new();
     let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
 
     let session = engine
-        .open_path(&path, None)
+        .open_bytes(&bytes, None)
         .expect("failed to open Fallout 1 save");
 
     assert_eq!(session.game(), Game::Fallout1);
@@ -55,9 +64,10 @@ fn engine_auto_detects_fallout1() {
 fn engine_auto_detects_fallout2() {
     let engine = Engine::new();
     let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
 
     let session = engine
-        .open_path(&path, None)
+        .open_bytes(&bytes, None)
         .expect("failed to open Fallout 2 save");
 
     assert_eq!(session.game(), Game::Fallout2);
@@ -80,9 +90,10 @@ fn engine_auto_detects_fallout2() {
 fn engine_returns_parse_error_for_wrong_hint() {
     let engine = Engine::new();
     let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
 
     let err = engine
-        .open_path(&path, Some(Game::Fallout1))
+        .open_bytes(&bytes, Some(Game::Fallout1))
         .expect_err("expected parse failure when forcing Fallout 1 hint for Fallout 2 file");
     assert_eq!(err.code, CoreErrorCode::Parse);
 }
@@ -94,7 +105,7 @@ fn engine_emits_unmodified_bytes_fallout1() {
     let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
 
     let session = engine
-        .open_path(&path, Some(Game::Fallout1))
+        .open_bytes(&bytes, Some(Game::Fallout1))
         .expect("failed to open Fallout 1 save");
     let emitted = session
         .to_bytes_unmodified()
@@ -110,7 +121,7 @@ fn engine_emits_unmodified_bytes_fallout2() {
     let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
 
     let session = engine
-        .open_path(&path, Some(Game::Fallout2))
+        .open_bytes(&bytes, Some(Game::Fallout2))
         .expect("failed to open Fallout 2 save");
     let emitted = session
         .to_bytes_unmodified()
@@ -123,8 +134,9 @@ fn engine_emits_unmodified_bytes_fallout2() {
 fn session_query_methods_match_fallout1_save_data() {
     let engine = Engine::new();
     let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
     let session = engine
-        .open_path(&path, Some(Game::Fallout1))
+        .open_bytes(&bytes, Some(Game::Fallout1))
         .expect("failed to open Fallout 1 save");
     let save = load_fallout1_save(1);
 
@@ -183,8 +195,9 @@ fn session_query_methods_match_fallout1_save_data() {
 fn session_query_methods_match_fallout2_save_data() {
     let engine = Engine::new();
     let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
     let session = engine
-        .open_path(&path, Some(Game::Fallout2))
+        .open_bytes(&bytes, Some(Game::Fallout2))
         .expect("failed to open Fallout 2 save");
     let save = load_fallout2_save(1);
 

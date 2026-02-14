@@ -1,4 +1,4 @@
-use fallout_se::gender::Gender;
+use fallout_core::gender::Gender;
 
 #[test]
 fn maps_known_gender_values() {

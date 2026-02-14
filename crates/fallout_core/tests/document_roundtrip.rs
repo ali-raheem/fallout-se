@@ -1,15 +1,23 @@
 use std::fs::{self, File};
 use std::io::{BufReader, Cursor};
+use std::path::PathBuf;
 
-use fallout_se::fallout1::Document as Fallout1Document;
-use fallout_se::fallout2::Document as Fallout2Document;
+use fallout_core::fallout1::Document as Fallout1Document;
+use fallout_core::fallout2::Document as Fallout2Document;
 
-fn fallout1_save_path(slot: u32) -> String {
-    format!("tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT", slot)
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn fallout2_save_path(slot: u32) -> String {
-    format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot)
+fn fallout1_save_path(slot: u32) -> PathBuf {
+    workspace_root().join(format!(
+        "tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT",
+        slot
+    ))
+}
+
+fn fallout2_save_path(slot: u32) -> PathBuf {
+    workspace_root().join(format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot))
 }
 
 #[test]

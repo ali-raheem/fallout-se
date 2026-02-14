@@ -99,11 +99,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
-name = "fallout_se"
+name = "fallout-se"
 version = "0.1.1"
 dependencies = [
  "clap",
+ "fallout-se-core",
  "serde_json",
+]
+
+[[package]]
+name = "fallout-se-core"
+version = "0.1.1"
+
+[[package]]
+name = "fallout-se-gui"
+version = "0.1.1"
+dependencies = [
+ "fallout-se-core",
+]
+
+[[package]]
+name = "fallout-se-tui"
+version = "0.1.1"
+dependencies = [
+ "fallout-se-core",
 ]
 
 [[package]]

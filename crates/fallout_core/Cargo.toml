@@ -1,0 +1,13 @@
+[package]
+name = "fallout-se-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "Core save parsing/query library for Fallout 1 & 2"
+
+[lib]
+name = "fallout_core"
+
+[dependencies]

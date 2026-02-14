@@ -1,0 +1,11 @@
+[package]
+name = "fallout-se-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "Terminal UI shell for Fallout save editor"
+
+[dependencies]
+fallout_core = { package = "fallout-se-core", path = "../fallout_core" }

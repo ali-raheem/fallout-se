@@ -1,14 +1,22 @@
 use std::fs::File;
 use std::io::BufReader;
+use std::path::PathBuf;
 
-use fallout_se::fallout1::SaveGame;
-use fallout_se::gender::Gender;
+use fallout_core::fallout1::SaveGame;
+use fallout_core::gender::Gender;
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
 
 fn load_slot(slot: u32) -> SaveGame {
-    let path = format!("tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT", slot);
-    let file = File::open(&path).unwrap_or_else(|e| panic!("Failed to open {}: {}", path, e));
+    let path = workspace_root().join(format!(
+        "tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT",
+        slot
+    ));
+    let file = File::open(&path).unwrap_or_else(|e| panic!("Failed to open {:?}: {}", path, e));
     SaveGame::parse(BufReader::new(file))
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {}", path, e))
+        .unwrap_or_else(|e| panic!("Failed to parse {:?}: {}", path, e))
 }
 
 #[test]
