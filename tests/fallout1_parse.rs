@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 use fallout_se::fallout1::SaveGame;
+use fallout_se::gender::Gender;
 
 fn load_slot(slot: u32) -> SaveGame {
     let path = format!("tests/fallout1_examples/SAVEGAME/SLOT{:02}/SAVE.DAT", slot);
@@ -18,6 +19,7 @@ fn parse_slot01_header() {
     assert_eq!(save.header.version_major, 1);
     assert_eq!(save.header.version_minor, 1);
     assert_eq!(save.header.game_year, 2162);
+    assert_eq!(save.gender, Gender::Female);
 }
 
 #[test]

@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 use fallout_se::fallout2::SaveGame;
+use fallout_se::gender::Gender;
 
 fn load_slot(slot: u32) -> SaveGame {
     let path = format!("tests/fallout2_examples/SLOT{:02}/SAVE.DAT", slot);
@@ -45,6 +46,7 @@ fn parse_slot01_core_sections() {
     assert_eq!(save.critter_data.base_stats[4], 4);
     assert_eq!(save.critter_data.base_stats[5], 7);
     assert_eq!(save.critter_data.base_stats[6], 4);
+    assert_eq!(save.gender, Gender::Male);
 
     assert!(save.tagged_skills.contains(&0));
     assert!(save.tagged_skills.contains(&4));
@@ -99,6 +101,7 @@ fn parse_slot02_core_sections() {
     assert_eq!(save.critter_data.base_stats[0], 4);
     assert_eq!(save.critter_data.base_stats[3], 10);
     assert_eq!(save.critter_data.base_stats[4], 7);
+    assert_eq!(save.gender, Gender::Female);
 
     assert!(save.tagged_skills.contains(&0));
     assert!(save.tagged_skills.contains(&6));

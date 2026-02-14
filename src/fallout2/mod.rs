@@ -3,8 +3,10 @@ pub mod object;
 pub mod sections;
 pub mod types;
 
-use std::io::{self, Read, Seek};
+use std::io::{self, Cursor, Read, Seek};
 
+use crate::gender::Gender;
+use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
 use crate::reader::BigEndianReader;
 use header::SaveHeader;
 use object::GameObject;
@@ -65,6 +67,7 @@ const PERK_SALESMAN: usize = 104;
 const PERK_THIEF: usize = 106;
 const PERK_VAULT_CITY_TRAINING: usize = 108;
 const PERK_EXPERT_EXCREMENT_EXPEDITOR: usize = 117;
+const STAT_GENDER_INDEX: usize = 34;
 
 #[derive(Copy, Clone)]
 struct SkillFormula {
@@ -214,6 +217,7 @@ pub struct SaveGame {
     pub player_object: GameObject,
     pub center_tile: i32,
     pub critter_data: CritterProtoData,
+    pub gender: Gender,
     pub kill_counts: [i32; KILL_TYPE_COUNT],
     pub tagged_skills: [i32; TAGGED_SKILL_COUNT],
     pub perks: [i32; PERK_COUNT],
@@ -226,66 +230,241 @@ pub struct SaveGame {
     pub layout_detection_score: i32,
 }
 
+#[derive(Debug)]
+pub struct Document {
+    pub save: SaveGame,
+    layout: FileLayout,
+    section_blobs: Vec<SectionBlob>,
+}
+
+#[derive(Debug)]
+struct SectionBlob {
+    bytes: Vec<u8>,
+}
+
+struct Capture<'a> {
+    source: &'a [u8],
+    sections: Vec<SectionLayout>,
+    blobs: Vec<SectionBlob>,
+}
+
+impl<'a> Capture<'a> {
+    fn new(source: &'a [u8]) -> Self {
+        Self {
+            source,
+            sections: Vec::new(),
+            blobs: Vec::new(),
+        }
+    }
+
+    fn record(&mut self, id: SectionId, start: usize, end: usize) {
+        self.sections.push(SectionLayout {
+            id,
+            range: ByteRange { start, end },
+        });
+        self.blobs.push(SectionBlob {
+            bytes: self.source[start..end].to_vec(),
+        });
+    }
+}
+
 impl SaveGame {
     pub fn parse<R: Read + Seek>(reader: R) -> io::Result<Self> {
         let mut r = BigEndianReader::new(reader);
+        parse_internal(&mut r, None)
+    }
+}
 
-        // Header (30,051 bytes)
-        let header = SaveHeader::parse(&mut r)?;
+impl Document {
+    pub fn parse_with_layout<R: Read + Seek>(mut reader: R) -> io::Result<Self> {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes)?;
 
-        // Handler 1: Player combat ID (4 bytes)
-        let player_combat_id = parse_player_combat_id(&mut r)?;
+        let mut capture = Capture::new(&bytes);
+        let mut r = BigEndianReader::new(Cursor::new(bytes.as_slice()));
+        let save = parse_internal(&mut r, Some(&mut capture))?;
 
-        // Handler 2: Game global variables (variable)
-        let globals = parse_game_global_vars(&mut r)?;
-        let global_var_count = globals.global_vars.len();
+        let consumed = r.position()? as usize;
+        let file_len = bytes.len();
+        if consumed < file_len {
+            capture.record(SectionId::Tail, consumed, file_len);
+        }
 
-        // Handler 3: Map file list + automap size (variable + 4 bytes)
-        let map_info = parse_map_file_list(&mut r)?;
-
-        // Handler 4: Game global variables duplicate
-        let skip_size = (global_var_count * 4) as u64;
-        r.skip(skip_size)?;
-
-        // Handler 5: Player object (variable length, recursive)
-        let player_section = parse_player_object(&mut r)?;
-
-        // Handler 6: Critter proto data (372 bytes)
-        let critter_data = parse_critter_proto_nearby(&mut r)?;
-
-        // Handler 7: Kill counts (76 bytes)
-        let kill_counts = parse_kill_counts(&mut r)?;
-
-        // Handler 8: Tagged skills (16 bytes)
-        let tagged_skills = parse_tagged_skills(&mut r)?;
-
-        // Handler 9 is 0 bytes.
-        // Handlers 10-13 contain variable-size sections in Fallout 2
-        // (party perks and AI packets). Detect and parse them together.
-        let post_tagged = parse_post_tagged_sections(&mut r)?;
+        let layout = FileLayout {
+            file_len,
+            sections: capture.sections,
+        };
+        layout.validate()?;
 
         Ok(Self {
-            header,
-            player_combat_id,
-            global_var_count,
-            map_files: map_info.map_files,
-            automap_size: map_info.automap_size,
-            player_object: player_section.player_object,
-            center_tile: player_section.center_tile,
-            critter_data,
-            kill_counts,
-            tagged_skills,
-            perks: post_tagged.perks,
-            combat_state: post_tagged.combat_state,
-            pc_stats: post_tagged.pc_stats,
-            selected_traits: post_tagged.selected_traits,
-            game_difficulty: post_tagged.game_difficulty,
-            party_member_count: post_tagged.party_member_count,
-            ai_packet_count: post_tagged.ai_packet_count,
-            layout_detection_score: post_tagged.detection_score,
+            save,
+            layout,
+            section_blobs: capture.blobs,
         })
     }
 
+    pub fn layout(&self) -> &FileLayout {
+        &self.layout
+    }
+
+    pub fn supports_editing(&self) -> bool {
+        false
+    }
+
+    pub fn to_bytes_unmodified(&self) -> io::Result<Vec<u8>> {
+        let mut out = Vec::with_capacity(self.layout.file_len);
+        for blob in &self.section_blobs {
+            out.extend_from_slice(&blob.bytes);
+        }
+
+        if out.len() != self.layout.file_len {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "unmodified emit length mismatch: got {}, expected {}",
+                    out.len(),
+                    self.layout.file_len
+                ),
+            ));
+        }
+
+        Ok(out)
+    }
+}
+
+fn parse_internal<R: Read + Seek>(
+    r: &mut BigEndianReader<R>,
+    mut capture: Option<&mut Capture<'_>>,
+) -> io::Result<SaveGame> {
+    // Header (30,051 bytes)
+    let header_start = r.position()? as usize;
+    let header = SaveHeader::parse(r)?;
+    let header_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Header, header_start, header_end);
+    }
+
+    // Handler 1: Player combat ID (4 bytes)
+    let h1_start = r.position()? as usize;
+    let player_combat_id = parse_player_combat_id(r)?;
+    let h1_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(1), h1_start, h1_end);
+    }
+
+    // Handler 2: Game global variables (variable)
+    let h2_start = r.position()? as usize;
+    let globals = parse_game_global_vars(r)?;
+    let h2_end = r.position()? as usize;
+    let global_var_count = globals.global_vars.len();
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(2), h2_start, h2_end);
+    }
+
+    // Handler 3: Map file list + automap size (variable + 4 bytes)
+    let h3_start = r.position()? as usize;
+    let map_info = parse_map_file_list(r)?;
+    let h3_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(3), h3_start, h3_end);
+    }
+
+    // Handler 4: Game global variables duplicate
+    let h4_start = r.position()? as usize;
+    let skip_size = (global_var_count * 4) as u64;
+    r.skip(skip_size)?;
+    let h4_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(4), h4_start, h4_end);
+    }
+
+    // Handler 5: Player object (variable length, recursive)
+    let h5_start = r.position()? as usize;
+    let player_section = parse_player_object(r)?;
+    let h5_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(5), h5_start, h5_end);
+    }
+
+    // Handler 6: Critter proto data (372 bytes)
+    let h6_start = r.position()? as usize;
+    let critter_data = parse_critter_proto_nearby(r)?;
+    let h6_end = r.position()? as usize;
+    let gender = Gender::from_raw(critter_data.base_stats[STAT_GENDER_INDEX]);
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(6), h6_start, h6_end);
+    }
+
+    // Handler 7: Kill counts (76 bytes)
+    let h7_start = r.position()? as usize;
+    let kill_counts = parse_kill_counts(r)?;
+    let h7_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(7), h7_start, h7_end);
+    }
+
+    // Handler 8: Tagged skills (16 bytes)
+    let h8_start = r.position()? as usize;
+    let tagged_skills = parse_tagged_skills(r)?;
+    let h8_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(8), h8_start, h8_end);
+    }
+
+    // Handler 9: roll check/no-op.
+    let h9_pos = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(9), h9_pos, h9_pos);
+    }
+
+    // Handlers 10-13 contain variable-size sections in Fallout 2
+    // (party perks and AI packets). Detect and parse them together.
+    let post_start = h9_pos;
+    let post_tagged = parse_post_tagged_sections(r)?;
+
+    if let Some(c) = capture.as_deref_mut() {
+        let h10_end = post_tagged.h10_end as usize;
+        let h11_end = post_tagged.h11_end as usize;
+        let h12_end = post_tagged.h12_end as usize;
+        let h13_end = post_tagged.h13_end as usize;
+        let h15_end = post_tagged.h15_end as usize;
+        let h16_end = post_tagged.h16_end as usize;
+        let h17_prefix_end = post_tagged.h17_prefix_end as usize;
+
+        c.record(SectionId::Handler(10), post_start, h10_end);
+        c.record(SectionId::Handler(11), h10_end, h11_end);
+        c.record(SectionId::Handler(12), h11_end, h12_end);
+        c.record(SectionId::Handler(13), h12_end, h13_end);
+        c.record(SectionId::Handler(14), h13_end, h13_end);
+        c.record(SectionId::Handler(15), h13_end, h15_end);
+        c.record(SectionId::Handler(16), h15_end, h16_end);
+        c.record(SectionId::Handler(17), h16_end, h17_prefix_end);
+    }
+
+    Ok(SaveGame {
+        header,
+        player_combat_id,
+        global_var_count,
+        map_files: map_info.map_files,
+        automap_size: map_info.automap_size,
+        player_object: player_section.player_object,
+        center_tile: player_section.center_tile,
+        critter_data,
+        gender,
+        kill_counts,
+        tagged_skills,
+        perks: post_tagged.perks,
+        combat_state: post_tagged.combat_state,
+        pc_stats: post_tagged.pc_stats,
+        selected_traits: post_tagged.selected_traits,
+        game_difficulty: post_tagged.game_difficulty,
+        party_member_count: post_tagged.party_member_count,
+        ai_packet_count: post_tagged.ai_packet_count,
+        layout_detection_score: post_tagged.detection_score,
+    })
+}
+
+impl SaveGame {
     pub fn effective_skill_value(&self, skill_index: usize) -> i32 {
         if skill_index >= SKILL_COUNT {
             return 0;

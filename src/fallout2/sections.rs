@@ -368,6 +368,13 @@ pub struct PostTaggedSections {
     pub party_member_count: usize,
     pub ai_packet_count: usize,
     pub detection_score: i32,
+    pub h10_end: u64,
+    pub h11_end: u64,
+    pub h12_end: u64,
+    pub h13_end: u64,
+    pub h15_end: u64,
+    pub h16_end: u64,
+    pub h17_prefix_end: u64,
 }
 
 pub fn parse_post_tagged_sections<R: Read + Seek>(
@@ -447,10 +454,21 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
     // after handler 13.
     r.seek_to(start_pos)?;
     let perks = parse_perks(r, best_party_count)?;
+    let h10_end = r.position()?;
+
     let combat_state = parse_combat_state(r)?;
+    let h11_end = r.position()?;
+
     r.skip((best_ai_packet_count * AI_PACKET_INT_COUNT * 4) as u64)?;
+    let h12_end = r.position()?;
+
     let pc_stats = parse_pc_stats(r)?;
+    let h13_end = r.position()?;
+
     let post_pc = parse_post_pc_sections(r)?;
+    let h17_prefix_end = r.position()?;
+    let h15_end = h13_end + 8;
+    let h16_end = h15_end + 4;
 
     Ok(PostTaggedSections {
         perks,
@@ -461,6 +479,13 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
         party_member_count: best_party_count,
         ai_packet_count: best_ai_packet_count,
         detection_score: best_score,
+        h10_end,
+        h11_end,
+        h12_end,
+        h13_end,
+        h15_end,
+        h16_end,
+        h17_prefix_end,
     })
 }
 

@@ -80,6 +80,7 @@ fn print_fallout1_stats(save: &Fallout1SaveGame) {
 
     println!("=== Fallout 1 Save: \"{}\" ===", h.description);
     println!("Character: {}", h.character_name);
+    println!("Gender: {}", save.gender);
 
     let month_name = month_to_name(h.game_month);
     println!("Game Date: {} {}, {}", month_name, h.game_day, h.game_year);
@@ -185,6 +186,7 @@ fn print_fallout2_stats(save: &Fallout2SaveGame) {
 
     println!("=== Fallout 2 Save: \"{}\" ===", h.description);
     println!("Character: {}", h.character_name);
+    println!("Gender: {}", save.gender);
 
     let month_name = month_to_name(h.game_month);
     println!("Game Date: {} {}, {}", month_name, h.game_day, h.game_year);
