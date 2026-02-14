@@ -2,5 +2,9 @@
 name = "fallout_se"
 version = "0.1.0"
 edition = "2024"
+authors = ["Ali Raheem"]
+repository = "https://github.com/ali-raheem/fallout-se"
+license = "MIT OR Apache-2.0"
+description = "Save File Editor for Fallout 1 & 2"
 
 [dependencies]
