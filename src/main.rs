@@ -1,8 +1,10 @@
-use std::env;
 use std::fs::File;
 use std::io::BufReader;
+use std::path::{Path, PathBuf};
 use std::process;
 
+use clap::Parser;
+use fallout_se::core_api::{Engine, Game as CoreGame, Session};
 use fallout_se::fallout1::SaveGame as Fallout1SaveGame;
 use fallout_se::fallout1::types::{KILL_TYPE_NAMES, PERK_NAMES, SKILL_NAMES, STAT_NAMES};
 use fallout_se::fallout2::SaveGame as Fallout2SaveGame;
@@ -10,69 +12,435 @@ use fallout_se::fallout2::types::{
     KILL_TYPE_NAMES as KILL_TYPE_NAMES_F2, PERK_NAMES as PERK_NAMES_F2,
     SKILL_NAMES as SKILL_NAMES_F2, STAT_NAMES as STAT_NAMES_F2,
 };
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum GameKind {
     Fallout1,
     Fallout2,
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    let (game, path) = parse_args(&args).unwrap_or_else(|usage| {
-        eprintln!("{usage}");
-        process::exit(1);
-    });
+#[derive(Debug, Parser)]
+#[command(author, version, about)]
+struct Cli {
+    #[arg(value_name = "SAVE.DAT")]
+    path: PathBuf,
+    #[arg(
+        long,
+        value_name = "1|2|fo1|fo2|fallout1|fallout2",
+        value_parser = parse_game_kind
+    )]
+    game: Option<GameKind>,
+    #[arg(long, visible_alias = "fo2", conflicts_with = "game")]
+    fallout2: bool,
+    #[arg(long)]
+    name: bool,
+    #[arg(long)]
+    description: bool,
+    #[arg(long)]
+    gender: bool,
+    #[arg(long)]
+    age: bool,
+    #[arg(long)]
+    level: bool,
+    #[arg(long)]
+    xp: bool,
+    #[arg(long)]
+    karma: bool,
+    #[arg(long)]
+    reputation: bool,
+    #[arg(long = "skill-points")]
+    skill_points: bool,
+    #[arg(long = "map")]
+    map_filename: bool,
+    #[arg(long)]
+    elevation: bool,
+    #[arg(long = "game-date")]
+    game_date: bool,
+    #[arg(long = "save-date")]
+    save_date: bool,
+    #[arg(long)]
+    json: bool,
+}
 
-    let file = File::open(path).unwrap_or_else(|e| {
-        eprintln!("Error opening {}: {}", path, e);
-        process::exit(1);
-    });
+#[derive(Debug, Default, Clone, Copy)]
+struct FieldSelection {
+    name: bool,
+    description: bool,
+    gender: bool,
+    age: bool,
+    level: bool,
+    xp: bool,
+    karma: bool,
+    reputation: bool,
+    skill_points: bool,
+    map_filename: bool,
+    elevation: bool,
+    game_date: bool,
+    save_date: bool,
+}
 
-    match game {
-        GameKind::Fallout1 => {
-            let save = Fallout1SaveGame::parse(BufReader::new(file)).unwrap_or_else(|e| {
-                eprintln!("Error parsing Fallout 1 save file: {}", path);
-                eprintln!("  {}", e);
-                process::exit(1);
-            });
-            print_fallout1_stats(&save);
+impl FieldSelection {
+    fn from_cli(cli: &Cli) -> Self {
+        Self {
+            name: cli.name,
+            description: cli.description,
+            gender: cli.gender,
+            age: cli.age,
+            level: cli.level,
+            xp: cli.xp,
+            karma: cli.karma,
+            reputation: cli.reputation,
+            skill_points: cli.skill_points,
+            map_filename: cli.map_filename,
+            elevation: cli.elevation,
+            game_date: cli.game_date,
+            save_date: cli.save_date,
         }
-        GameKind::Fallout2 => {
-            let save = Fallout2SaveGame::parse(BufReader::new(file)).unwrap_or_else(|e| {
-                eprintln!("Error parsing Fallout 2 save file: {}", path);
-                eprintln!("  {}", e);
-                process::exit(1);
-            });
-            print_fallout2_stats(&save);
+    }
+
+    fn is_field_mode(&self) -> bool {
+        self.name
+            || self.description
+            || self.gender
+            || self.age
+            || self.level
+            || self.xp
+            || self.karma
+            || self.reputation
+            || self.skill_points
+            || self.map_filename
+            || self.elevation
+            || self.game_date
+            || self.save_date
+    }
+
+    fn selected_pairs(&self, session: &Session) -> Vec<(&'static str, String)> {
+        let snapshot = session.snapshot();
+        let mut out = Vec::new();
+
+        if self.name {
+            out.push(("name", snapshot.character_name.clone()));
         }
+        if self.description {
+            out.push(("description", snapshot.description.clone()));
+        }
+        if self.gender {
+            out.push(("gender", snapshot.gender.to_string()));
+        }
+        if self.age {
+            out.push(("age", age_text(session)));
+        }
+        if self.level {
+            out.push(("level", snapshot.level.to_string()));
+        }
+        if self.xp {
+            out.push(("xp", snapshot.experience.to_string()));
+        }
+        if self.karma {
+            out.push(("karma", snapshot.karma.to_string()));
+        }
+        if self.reputation {
+            out.push(("reputation", snapshot.reputation.to_string()));
+        }
+        if self.skill_points {
+            out.push(("skill_points", snapshot.unspent_skill_points.to_string()));
+        }
+        if self.map_filename {
+            out.push(("map", snapshot.map_filename.clone()));
+        }
+        if self.elevation {
+            out.push(("elevation", snapshot.elevation.to_string()));
+        }
+        if self.game_date {
+            out.push((
+                "game_date",
+                format_date(
+                    snapshot.game_date.year,
+                    snapshot.game_date.month,
+                    snapshot.game_date.day,
+                ),
+            ));
+        }
+        if self.save_date {
+            out.push((
+                "save_date",
+                format_date(
+                    snapshot.file_date.year,
+                    snapshot.file_date.month,
+                    snapshot.file_date.day,
+                ),
+            ));
+        }
+
+        out
+    }
+
+    fn selected_json(&self, session: &Session) -> JsonMap<String, JsonValue> {
+        let snapshot = session.snapshot();
+        let mut out = JsonMap::new();
+
+        if self.name {
+            out.insert(
+                "name".to_string(),
+                JsonValue::String(snapshot.character_name.clone()),
+            );
+        }
+        if self.description {
+            out.insert(
+                "description".to_string(),
+                JsonValue::String(snapshot.description.clone()),
+            );
+        }
+        if self.gender {
+            out.insert(
+                "gender".to_string(),
+                JsonValue::String(snapshot.gender.to_string()),
+            );
+        }
+        if self.age {
+            match age_value(session) {
+                Some(value) => {
+                    out.insert("age".to_string(), JsonValue::from(value));
+                }
+                None => {
+                    out.insert("age".to_string(), JsonValue::Null);
+                }
+            }
+        }
+        if self.level {
+            out.insert("level".to_string(), JsonValue::from(snapshot.level));
+        }
+        if self.xp {
+            out.insert("xp".to_string(), JsonValue::from(snapshot.experience));
+        }
+        if self.karma {
+            out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
+        }
+        if self.reputation {
+            out.insert(
+                "reputation".to_string(),
+                JsonValue::from(snapshot.reputation),
+            );
+        }
+        if self.skill_points {
+            out.insert(
+                "skill_points".to_string(),
+                JsonValue::from(snapshot.unspent_skill_points),
+            );
+        }
+        if self.map_filename {
+            out.insert(
+                "map".to_string(),
+                JsonValue::String(snapshot.map_filename.clone()),
+            );
+        }
+        if self.elevation {
+            out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
+        }
+        if self.game_date {
+            out.insert(
+                "game_date".to_string(),
+                JsonValue::String(format_date(
+                    snapshot.game_date.year,
+                    snapshot.game_date.month,
+                    snapshot.game_date.day,
+                )),
+            );
+        }
+        if self.save_date {
+            out.insert(
+                "save_date".to_string(),
+                JsonValue::String(format_date(
+                    snapshot.file_date.year,
+                    snapshot.file_date.month,
+                    snapshot.file_date.day,
+                )),
+            );
+        }
+
+        out
     }
 }
 
-fn parse_args(args: &[String]) -> Result<(GameKind, &str), String> {
-    let usage = format!(
-        "Usage:\n  {} <path-to-SAVE.DAT>\n  {} --game <1|2> <path-to-SAVE.DAT>\n  {} --fallout2 <path-to-SAVE.DAT>",
-        args[0], args[0], args[0]
+fn main() {
+    let cli = Cli::parse();
+    let fields = FieldSelection::from_cli(&cli);
+
+    let game_hint = cli
+        .game
+        .or(if cli.fallout2 {
+            Some(GameKind::Fallout2)
+        } else {
+            None
+        })
+        .map(to_core_game);
+
+    let engine = Engine::new();
+    let session = engine.open_path(&cli.path, game_hint).unwrap_or_else(|e| {
+        eprintln!("Error parsing save file: {}", cli.path.display());
+        eprintln!("  {}", e);
+        process::exit(1);
+    });
+
+    if cli.json {
+        let json = if fields.is_field_mode() {
+            JsonValue::Object(fields.selected_json(&session))
+        } else {
+            JsonValue::Object(default_json(&session))
+        };
+        let rendered = serde_json::to_string_pretty(&json).unwrap_or_else(|e| {
+            eprintln!("Error rendering JSON output: {e}");
+            process::exit(1);
+        });
+        println!("{rendered}");
+        return;
+    }
+
+    if fields.is_field_mode() {
+        for (key, value) in fields.selected_pairs(&session) {
+            println!("{key}={value}");
+        }
+        return;
+    }
+
+    match session.game() {
+        CoreGame::Fallout1 => dump_fallout1(&cli.path),
+        CoreGame::Fallout2 => dump_fallout2(&cli.path),
+    }
+}
+
+fn dump_fallout1(path: &Path) {
+    let file = File::open(path).unwrap_or_else(|e| {
+        eprintln!("Error opening {}: {}", path.display(), e);
+        process::exit(1);
+    });
+    let save = Fallout1SaveGame::parse(BufReader::new(file)).unwrap_or_else(|e| {
+        eprintln!("Error parsing Fallout 1 save file: {}", path.display());
+        eprintln!("  {}", e);
+        process::exit(1);
+    });
+    print_fallout1_stats(&save);
+}
+
+fn dump_fallout2(path: &Path) {
+    let file = File::open(path).unwrap_or_else(|e| {
+        eprintln!("Error opening {}: {}", path.display(), e);
+        process::exit(1);
+    });
+    let save = Fallout2SaveGame::parse(BufReader::new(file)).unwrap_or_else(|e| {
+        eprintln!("Error parsing Fallout 2 save file: {}", path.display());
+        eprintln!("  {}", e);
+        process::exit(1);
+    });
+    print_fallout2_stats(&save);
+}
+
+fn parse_game_kind(value: &str) -> Result<GameKind, String> {
+    match value.to_ascii_lowercase().as_str() {
+        "1" | "fo1" | "fallout1" => Ok(GameKind::Fallout1),
+        "2" | "fo2" | "fallout2" => Ok(GameKind::Fallout2),
+        _ => Err(format!(
+            "invalid game value '{value}', expected one of: 1, 2, fo1, fo2, fallout1, fallout2"
+        )),
+    }
+}
+
+fn to_core_game(game: GameKind) -> CoreGame {
+    match game {
+        GameKind::Fallout1 => CoreGame::Fallout1,
+        GameKind::Fallout2 => CoreGame::Fallout2,
+    }
+}
+
+fn format_date(year: i16, month: i16, day: i16) -> String {
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn age_value(session: &Session) -> Option<i32> {
+    session
+        .derived_stats_nonzero()
+        .into_iter()
+        .find(|entry| entry.name == "Age")
+        .map(|entry| entry.total)
+}
+
+fn age_text(session: &Session) -> String {
+    age_value(session)
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn default_json(session: &Session) -> JsonMap<String, JsonValue> {
+    let snapshot = session.snapshot();
+    let mut out = JsonMap::new();
+
+    out.insert(
+        "game".to_string(),
+        JsonValue::String(match session.game() {
+            CoreGame::Fallout1 => "Fallout1".to_string(),
+            CoreGame::Fallout2 => "Fallout2".to_string(),
+        }),
+    );
+    out.insert(
+        "name".to_string(),
+        JsonValue::String(snapshot.character_name.clone()),
+    );
+    out.insert(
+        "description".to_string(),
+        JsonValue::String(snapshot.description.clone()),
+    );
+    out.insert(
+        "gender".to_string(),
+        JsonValue::String(snapshot.gender.to_string()),
+    );
+    match age_value(session) {
+        Some(value) => {
+            out.insert("age".to_string(), JsonValue::from(value));
+        }
+        None => {
+            out.insert("age".to_string(), JsonValue::Null);
+        }
+    }
+    out.insert("level".to_string(), JsonValue::from(snapshot.level));
+    out.insert("xp".to_string(), JsonValue::from(snapshot.experience));
+    out.insert(
+        "skill_points".to_string(),
+        JsonValue::from(snapshot.unspent_skill_points),
+    );
+    out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
+    out.insert(
+        "reputation".to_string(),
+        JsonValue::from(snapshot.reputation),
+    );
+    out.insert(
+        "map".to_string(),
+        JsonValue::String(snapshot.map_filename.clone()),
+    );
+    out.insert("map_id".to_string(), JsonValue::from(snapshot.map_id));
+    out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
+    out.insert(
+        "game_date".to_string(),
+        JsonValue::String(format_date(
+            snapshot.game_date.year,
+            snapshot.game_date.month,
+            snapshot.game_date.day,
+        )),
+    );
+    out.insert(
+        "save_date".to_string(),
+        JsonValue::String(format_date(
+            snapshot.file_date.year,
+            snapshot.file_date.month,
+            snapshot.file_date.day,
+        )),
+    );
+    out.insert(
+        "global_var_count".to_string(),
+        JsonValue::from(snapshot.global_var_count),
     );
 
-    if args.len() == 2 {
-        return Ok((GameKind::Fallout1, args[1].as_str()));
-    }
-
-    if args.len() == 3 && (args[1] == "--fallout2" || args[1] == "--fo2") {
-        return Ok((GameKind::Fallout2, args[2].as_str()));
-    }
-
-    if args.len() == 4 && args[1] == "--game" {
-        let game = match args[2].as_str() {
-            "1" | "fo1" | "fallout1" => GameKind::Fallout1,
-            "2" | "fo2" | "fallout2" => GameKind::Fallout2,
-            _ => return Err(usage),
-        };
-        return Ok((game, args[3].as_str()));
-    }
-
-    Err(usage)
+    out
 }
 
 fn print_fallout1_stats(save: &Fallout1SaveGame) {

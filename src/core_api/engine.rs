@@ -3,10 +3,15 @@ use std::io::Cursor;
 use std::path::Path;
 
 use crate::fallout1;
+use crate::fallout1::types as f1_types;
 use crate::fallout2;
+use crate::fallout2::types as f2_types;
 
 use super::error::{CoreError, CoreErrorCode};
-use super::types::{Capabilities, CapabilityIssue, DateParts, Game, Snapshot};
+use super::types::{
+    Capabilities, CapabilityIssue, DateParts, Game, KillCountEntry, PerkEntry, SkillEntry,
+    Snapshot, StatEntry,
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;
@@ -102,6 +107,164 @@ impl Session {
 
     pub fn capabilities(&self) -> &Capabilities {
         &self.capabilities
+    }
+
+    pub fn special_stats(&self) -> Vec<StatEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => collect_stat_entries(
+                &f1_types::STAT_NAMES,
+                &doc.save.critter_data.base_stats,
+                &doc.save.critter_data.bonus_stats,
+                0..7,
+                false,
+            ),
+            LoadedDocument::Fallout2(doc) => collect_stat_entries(
+                &f2_types::STAT_NAMES,
+                &doc.save.critter_data.base_stats,
+                &doc.save.critter_data.bonus_stats,
+                0..7,
+                false,
+            ),
+        }
+    }
+
+    pub fn derived_stats_nonzero(&self) -> Vec<StatEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => collect_stat_entries(
+                &f1_types::STAT_NAMES,
+                &doc.save.critter_data.base_stats,
+                &doc.save.critter_data.bonus_stats,
+                7..f1_types::STAT_NAMES.len(),
+                true,
+            ),
+            LoadedDocument::Fallout2(doc) => collect_stat_entries(
+                &f2_types::STAT_NAMES,
+                &doc.save.critter_data.base_stats,
+                &doc.save.critter_data.bonus_stats,
+                7..f2_types::STAT_NAMES.len(),
+                true,
+            ),
+        }
+    }
+
+    pub fn skills(&self) -> Vec<SkillEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => {
+                let save = &doc.save;
+                let mut out = Vec::with_capacity(f1_types::SKILL_NAMES.len());
+                for (index, name) in f1_types::SKILL_NAMES.iter().enumerate() {
+                    let tagged = save
+                        .tagged_skills
+                        .iter()
+                        .any(|&s| s >= 0 && s as usize == index);
+                    out.push(SkillEntry {
+                        index,
+                        name: (*name).to_string(),
+                        value: save.critter_data.skills[index],
+                        tagged,
+                    });
+                }
+                out
+            }
+            LoadedDocument::Fallout2(doc) => {
+                let save = &doc.save;
+                let mut out = Vec::with_capacity(f2_types::SKILL_NAMES.len());
+                for (index, name) in f2_types::SKILL_NAMES.iter().enumerate() {
+                    let tagged = save
+                        .tagged_skills
+                        .iter()
+                        .any(|&s| s >= 0 && s as usize == index);
+                    out.push(SkillEntry {
+                        index,
+                        name: (*name).to_string(),
+                        value: save.effective_skill_value(index),
+                        tagged,
+                    });
+                }
+                out
+            }
+        }
+    }
+
+    pub fn active_perks(&self) -> Vec<PerkEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => doc
+                .save
+                .perks
+                .iter()
+                .enumerate()
+                .filter_map(|(index, &rank)| {
+                    if rank <= 0 {
+                        return None;
+                    }
+                    Some(PerkEntry {
+                        index,
+                        name: f1_types::PERK_NAMES[index].to_string(),
+                        rank,
+                    })
+                })
+                .collect(),
+            LoadedDocument::Fallout2(doc) => doc
+                .save
+                .perks
+                .iter()
+                .enumerate()
+                .filter_map(|(index, &rank)| {
+                    if rank <= 0 {
+                        return None;
+                    }
+                    Some(PerkEntry {
+                        index,
+                        name: f2_types::PERK_NAMES[index].to_string(),
+                        rank,
+                    })
+                })
+                .collect(),
+        }
+    }
+
+    pub fn nonzero_kill_counts(&self) -> Vec<KillCountEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => doc
+                .save
+                .kill_counts
+                .iter()
+                .enumerate()
+                .filter_map(|(index, &count)| {
+                    if count <= 0 {
+                        return None;
+                    }
+                    Some(KillCountEntry {
+                        index,
+                        name: f1_types::KILL_TYPE_NAMES[index].to_string(),
+                        count,
+                    })
+                })
+                .collect(),
+            LoadedDocument::Fallout2(doc) => doc
+                .save
+                .kill_counts
+                .iter()
+                .enumerate()
+                .filter_map(|(index, &count)| {
+                    if count <= 0 {
+                        return None;
+                    }
+                    Some(KillCountEntry {
+                        index,
+                        name: f2_types::KILL_TYPE_NAMES[index].to_string(),
+                        count,
+                    })
+                })
+                .collect(),
+        }
+    }
+
+    pub fn map_files(&self) -> Vec<String> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => doc.save.map_files.clone(),
+            LoadedDocument::Fallout2(doc) => doc.save.map_files.clone(),
+        }
     }
 
     pub fn to_bytes_unmodified(&self) -> Result<Vec<u8>, CoreError> {
@@ -201,4 +364,32 @@ fn session_from_fallout2(doc: fallout2::Document) -> Session {
         capabilities: Capabilities::read_only(issues),
         document: LoadedDocument::Fallout2(doc),
     }
+}
+
+fn collect_stat_entries(
+    names: &[&str],
+    base_stats: &[i32],
+    bonus_stats: &[i32],
+    indices: std::ops::Range<usize>,
+    hide_zero_totals: bool,
+) -> Vec<StatEntry> {
+    let mut out = Vec::new();
+    for index in indices {
+        let base = base_stats[index];
+        let bonus = bonus_stats[index];
+        let total = base + bonus;
+
+        if hide_zero_totals && total == 0 && bonus == 0 {
+            continue;
+        }
+
+        out.push(StatEntry {
+            index,
+            name: names[index].to_string(),
+            base,
+            bonus,
+            total,
+        });
+    }
+    out
 }

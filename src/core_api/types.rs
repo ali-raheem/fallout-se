@@ -60,3 +60,34 @@ impl Capabilities {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatEntry {
+    pub index: usize,
+    pub name: String,
+    pub base: i32,
+    pub bonus: i32,
+    pub total: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillEntry {
+    pub index: usize,
+    pub name: String,
+    pub value: i32,
+    pub tagged: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerkEntry {
+    pub index: usize,
+    pub name: String,
+    pub rank: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KillCountEntry {
+    pub index: usize,
+    pub name: String,
+    pub count: i32,
+}
