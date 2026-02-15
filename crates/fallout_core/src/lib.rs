@@ -3,4 +3,5 @@ pub mod fallout1;
 pub mod fallout2;
 pub mod gender;
 pub mod layout;
+pub mod object;
 pub mod reader;

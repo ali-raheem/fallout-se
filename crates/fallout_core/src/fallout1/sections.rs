@@ -2,7 +2,7 @@ use std::io::{self, Read, Seek};
 
 use crate::reader::BigEndianReader;
 
-use super::object::GameObject;
+use crate::object::GameObject;
 use super::types::{
     KILL_TYPE_COUNT, PC_STAT_COUNT, PERK_COUNT, SAVEABLE_STAT_COUNT, SKILL_COUNT,
     TAGGED_SKILL_COUNT,
@@ -252,4 +252,62 @@ pub fn parse_pc_stats<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Result<
         reputation: stats[3],
         karma: stats[4],
     })
+}
+
+// --- Handler 15: Event Queue ---
+
+/// Skip the event queue. Returns Ok(()) if successfully parsed and skipped.
+pub fn skip_event_queue<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Result<()> {
+    let count = r.read_i32()?;
+    if !(0..=10_000).contains(&count) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid event queue count: {count}"),
+        ));
+    }
+
+    for _ in 0..count {
+        // 12-byte header: time (4) + type (4) + objectId (4)
+        let _time = r.read_i32()?;
+        let event_type = r.read_i32()?;
+        let _object_id = r.read_i32()?;
+
+        // Type-specific data sizes
+        let extra_bytes: u64 = match event_type {
+            0 => 12, // Drug
+            1 => 0,  // Knockout
+            2 => 4,  // Withdrawal
+            3 => 8,  // Script
+            4 => 0,  // Game time
+            5 => 0,  // Poison
+            6 => 0,  // Radiation
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown event type: {event_type}"),
+                ));
+            }
+        };
+        r.skip(extra_bytes)?;
+    }
+
+    Ok(())
+}
+
+// --- Handler 16: Traits ---
+
+pub fn parse_traits<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Result<[i32; 2]> {
+    let trait1 = r.read_i32()?;
+    let trait2 = r.read_i32()?;
+    if !is_trait_value_valid(trait1) || !is_trait_value_valid(trait2) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid trait values: [{trait1}, {trait2}]"),
+        ));
+    }
+    Ok([trait1, trait2])
+}
+
+fn is_trait_value_valid(v: i32) -> bool {
+    v == -1 || (0..16).contains(&v)
 }

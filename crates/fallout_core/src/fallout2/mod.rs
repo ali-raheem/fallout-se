@@ -9,7 +9,7 @@ use crate::gender::Gender;
 use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
 use crate::reader::BigEndianReader;
 use header::SaveHeader;
-use object::GameObject;
+use crate::object::GameObject;
 use sections::{
     CombatState, CritterProtoData, PcStats, parse_critter_proto_nearby, parse_game_global_vars,
     parse_kill_counts, parse_map_file_list, parse_player_combat_id, parse_player_object,
@@ -75,6 +75,7 @@ const PC_STATS_LEVEL_OFFSET: usize = I32_WIDTH;
 const PC_STATS_EXPERIENCE_OFFSET: usize = I32_WIDTH * 2;
 const PC_STATS_REPUTATION_OFFSET: usize = I32_WIDTH * 3;
 const PC_STATS_KARMA_OFFSET: usize = I32_WIDTH * 4;
+const PLAYER_HP_OFFSET_IN_HANDLER5: usize = 116;
 
 #[derive(Copy, Clone)]
 struct SkillFormula {
@@ -334,6 +335,21 @@ impl Document {
         emit_from_blobs(&self.section_blobs, self.layout.file_len, "modified")
     }
 
+    pub fn set_hp(&mut self, hp: i32) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Handler(5))?;
+        patch_i32_in_blob(blob, PLAYER_HP_OFFSET_IN_HANDLER5, hp, "handler 5", "hp")?;
+        if let object::ObjectData::Critter(ref mut data) = self.save.player_object.object_data {
+            data.hp = hp;
+        }
+        Ok(())
+    }
+
+    pub fn set_base_stat(&mut self, stat_index: usize, value: i32) -> io::Result<()> {
+        self.patch_base_stat_handler(stat_index, value, &format!("stat {stat_index}"))?;
+        self.save.critter_data.base_stats[stat_index] = value;
+        Ok(())
+    }
+
     pub fn set_age(&mut self, age: i32) -> io::Result<()> {
         self.patch_base_stat_handler(STAT_AGE_INDEX, age, "age")?;
         self.save.critter_data.base_stats[STAT_AGE_INDEX] = age;
@@ -390,9 +406,9 @@ impl Document {
         raw: i32,
         field: &str,
     ) -> io::Result<()> {
-        let base_stats = self.save.critter_data.base_stats;
+        let critter_data = self.save.critter_data.clone();
         let blob = self.section_blob_mut(SectionId::Handler(6))?;
-        let offset = find_base_stat_offset_in_handler6(&blob.bytes, &base_stats, stat_index)?;
+        let offset = find_base_stat_offset_in_handler6(&blob.bytes, &critter_data, stat_index)?;
         patch_i32_in_blob(blob, offset, raw, "handler 6", field)
     }
 
@@ -478,19 +494,26 @@ fn patch_i32_in_blob(
 
 fn find_base_stat_offset_in_handler6(
     handler6_bytes: &[u8],
-    base_stats: &[i32; SAVEABLE_STAT_COUNT],
+    critter_data: &CritterProtoData,
     stat_index: usize,
 ) -> io::Result<usize> {
-    if stat_index == 0 || stat_index >= SAVEABLE_STAT_COUNT {
+    if stat_index >= SAVEABLE_STAT_COUNT {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("unsupported base stat index {stat_index}"),
         ));
     }
 
-    let mut prefix = Vec::with_capacity(stat_index * I32_WIDTH);
-    for value in base_stats.iter().take(stat_index) {
-        prefix.extend_from_slice(&value.to_be_bytes());
+    // For index 0, use sneak_working + flags as prefix to locate the start of base_stats.
+    // For index > 0, use the preceding base stat values as prefix.
+    let mut prefix = Vec::new();
+    if stat_index == 0 {
+        prefix.extend_from_slice(&critter_data.sneak_working.to_be_bytes());
+        prefix.extend_from_slice(&critter_data.flags.to_be_bytes());
+    } else {
+        for value in critter_data.base_stats.iter().take(stat_index) {
+            prefix.extend_from_slice(&value.to_be_bytes());
+        }
     }
 
     let mut matches = handler6_bytes
@@ -512,7 +535,7 @@ fn find_base_stat_offset_in_handler6(
         ));
     }
 
-    Ok(first + stat_index * I32_WIDTH)
+    Ok(first + prefix.len())
 }
 
 fn find_experience_offset_in_handler6(
@@ -645,7 +668,7 @@ fn parse_internal<R: Read + Seek>(
     let post_start = h9_pos;
     let post_tagged = parse_post_tagged_sections(r)?;
 
-    if let Some(c) = capture.as_deref_mut() {
+    if let Some(c) = capture {
         let h10_end = post_tagged.h10_end as usize;
         let h11_end = post_tagged.h11_end as usize;
         let h12_end = post_tagged.h12_end as usize;

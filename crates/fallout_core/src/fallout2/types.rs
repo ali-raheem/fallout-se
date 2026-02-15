@@ -10,14 +10,8 @@ pub const KILL_TYPE_COUNT: usize = 19;
 pub const PC_STAT_COUNT: usize = 5;
 pub const TAGGED_SKILL_COUNT: usize = 4;
 
-// Object type extracted from PID: (pid >> 24) & 0x0F.
-pub const OBJ_TYPE_ITEM: i32 = 0;
-pub const OBJ_TYPE_CRITTER: i32 = 1;
-pub const OBJ_TYPE_MISC: i32 = 5;
-
-pub fn obj_type_from_pid(pid: i32) -> i32 {
-    (pid >> 24) & 0x0F
-}
+// Object type and PID utilities — re-exported from shared module
+pub use crate::object::{OBJ_TYPE_CRITTER, OBJ_TYPE_ITEM, OBJ_TYPE_MISC, obj_type_from_pid};
 
 // --- Display name tables ---
 
@@ -200,6 +194,25 @@ pub const PERK_NAMES: [&str; PERK_COUNT] = [
     "EXPERT EXCREMENT EXPEDITOR",
     "WEAPON ENHANCED KNOCKOUT",
     "JINXED",
+];
+
+pub const TRAIT_NAMES: [&str; 16] = [
+    "Fast Metabolism",
+    "Bruiser",
+    "Small Frame",
+    "One Hander",
+    "Finesse",
+    "Kamikaze",
+    "Heavy Handed",
+    "Fast Shot",
+    "Bloody Mess",
+    "Jinxed",
+    "Good Natured",
+    "Chem Reliant",
+    "Chem Resistant",
+    "Night Person",
+    "Skilled",
+    "Gifted",
 ];
 
 pub const KILL_TYPE_NAMES: [&str; KILL_TYPE_COUNT] = [

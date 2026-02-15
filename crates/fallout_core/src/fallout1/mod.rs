@@ -9,11 +9,12 @@ use crate::gender::Gender;
 use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
 use crate::reader::BigEndianReader;
 use header::SaveHeader;
-use object::GameObject;
+use crate::object::GameObject;
 use sections::{
     CombatState, CritterProtoData, PcStats, parse_combat_state, parse_critter_proto,
     parse_game_global_vars, parse_kill_counts, parse_map_file_list, parse_pc_stats, parse_perks,
-    parse_player_combat_id, parse_player_object, parse_tagged_skills,
+    parse_player_combat_id, parse_player_object, parse_tagged_skills, parse_traits,
+    skip_event_queue,
 };
 use types::{KILL_TYPE_COUNT, PERK_COUNT, SAVEABLE_STAT_COUNT, SKILL_COUNT, TAGGED_SKILL_COUNT};
 
@@ -35,6 +36,7 @@ const PC_STATS_LEVEL_OFFSET: usize = I32_WIDTH;
 const PC_STATS_EXPERIENCE_OFFSET: usize = I32_WIDTH * 2;
 const PC_STATS_REPUTATION_OFFSET: usize = I32_WIDTH * 3;
 const PC_STATS_KARMA_OFFSET: usize = I32_WIDTH * 4;
+const PLAYER_HP_OFFSET_IN_HANDLER5: usize = 116;
 
 #[derive(Debug)]
 pub struct SaveGame {
@@ -51,6 +53,7 @@ pub struct SaveGame {
     pub perks: [i32; PERK_COUNT],
     pub combat_state: CombatState,
     pub pc_stats: PcStats,
+    pub selected_traits: [i32; 2],
 }
 
 #[derive(Debug)]
@@ -148,6 +151,22 @@ impl Document {
 
     pub fn to_bytes_modified(&self) -> io::Result<Vec<u8>> {
         emit_from_blobs(&self.section_blobs, self.layout.file_len, "modified")
+    }
+
+    pub fn set_hp(&mut self, hp: i32) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Handler(5))?;
+        patch_i32_in_blob(blob, PLAYER_HP_OFFSET_IN_HANDLER5, hp, "handler 5", "hp")?;
+        if let object::ObjectData::Critter(ref mut data) = self.save.player_object.object_data {
+            data.hp = hp;
+        }
+        Ok(())
+    }
+
+    pub fn set_base_stat(&mut self, stat_index: usize, value: i32) -> io::Result<()> {
+        let offset = CRITTER_PROTO_BASE_STATS_OFFSET + stat_index * I32_WIDTH;
+        self.patch_handler6_i32(offset, value, &format!("stat {stat_index}"))?;
+        self.save.critter_data.base_stats[stat_index] = value;
+        Ok(())
     }
 
     pub fn set_age(&mut self, age: i32) -> io::Result<()> {
@@ -278,6 +297,35 @@ fn emit_from_blobs(
     Ok(out)
 }
 
+fn parse_handlers_14_to_16<R: Read + Seek>(
+    r: &mut BigEndianReader<R>,
+    capture: &mut Option<&mut Capture<'_>>,
+) -> io::Result<[i32; 2]> {
+    // Handler 14: no-op (0 bytes)
+    let h14_pos = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(14), h14_pos, h14_pos);
+    }
+
+    // Handler 15: event queue (variable)
+    let h15_start = r.position()? as usize;
+    skip_event_queue(r)?;
+    let h15_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(15), h15_start, h15_end);
+    }
+
+    // Handler 16: traits (8 bytes)
+    let h16_start = r.position()? as usize;
+    let traits = parse_traits(r)?;
+    let h16_end = r.position()? as usize;
+    if let Some(c) = capture.as_deref_mut() {
+        c.record(SectionId::Handler(16), h16_start, h16_end);
+    }
+
+    Ok(traits)
+}
+
 fn parse_internal<R: Read + Seek>(
     r: &mut BigEndianReader<R>,
     mut capture: Option<&mut Capture<'_>>,
@@ -393,6 +441,16 @@ fn parse_internal<R: Read + Seek>(
         c.record(SectionId::Handler(13), h13_start, h13_end);
     }
 
+    // Handlers 14-16: try to parse traits; fall back to [-1, -1] on failure.
+    let pre_traits_pos = r.position()?;
+    let selected_traits = match parse_handlers_14_to_16(r, &mut capture) {
+        Ok(traits) => traits,
+        Err(_) => {
+            r.seek_to(pre_traits_pos)?;
+            [-1, -1]
+        }
+    };
+
     Ok(SaveGame {
         header,
         player_combat_id,
@@ -407,5 +465,6 @@ fn parse_internal<R: Read + Seek>(
         perks,
         combat_state,
         pc_stats,
+        selected_traits,
     })
 }

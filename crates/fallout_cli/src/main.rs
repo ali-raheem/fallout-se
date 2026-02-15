@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::{Parser, ValueEnum};
-use fallout_core::core_api::{Engine, Game as CoreGame, Session};
+use fallout_core::core_api::{Engine, Game as CoreGame, Session, TraitEntry};
 use fallout_core::fallout1::SaveGame as Fallout1SaveGame;
 use fallout_core::fallout1::types::{KILL_TYPE_NAMES, PERK_NAMES, SKILL_NAMES, STAT_NAMES};
 use fallout_core::fallout2::SaveGame as Fallout2SaveGame;
@@ -74,6 +74,10 @@ struct Cli {
     #[arg(long = "save-date")]
     save_date: bool,
     #[arg(long)]
+    traits: bool,
+    #[arg(long)]
+    hp: bool,
+    #[arg(long)]
     json: bool,
     #[arg(long = "set-age")]
     set_age: Option<i32>,
@@ -89,6 +93,22 @@ struct Cli {
     set_karma: Option<i32>,
     #[arg(long = "set-gender")]
     set_gender: Option<GenderArg>,
+    #[arg(long = "set-strength")]
+    set_strength: Option<i32>,
+    #[arg(long = "set-perception")]
+    set_perception: Option<i32>,
+    #[arg(long = "set-endurance")]
+    set_endurance: Option<i32>,
+    #[arg(long = "set-charisma")]
+    set_charisma: Option<i32>,
+    #[arg(long = "set-intelligence")]
+    set_intelligence: Option<i32>,
+    #[arg(long = "set-agility")]
+    set_agility: Option<i32>,
+    #[arg(long = "set-luck")]
+    set_luck: Option<i32>,
+    #[arg(long = "set-hp")]
+    set_hp: Option<i32>,
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -108,6 +128,8 @@ struct FieldSelection {
     elevation: bool,
     game_date: bool,
     save_date: bool,
+    traits: bool,
+    hp: bool,
 }
 
 impl FieldSelection {
@@ -126,6 +148,8 @@ impl FieldSelection {
             elevation: cli.elevation,
             game_date: cli.game_date,
             save_date: cli.save_date,
+            traits: cli.traits,
+            hp: cli.hp,
         }
     }
 
@@ -143,6 +167,8 @@ impl FieldSelection {
             || self.elevation
             || self.game_date
             || self.save_date
+            || self.traits
+            || self.hp
     }
 
     fn selected_pairs(&self, session: &Session) -> Vec<(&'static str, String)> {
@@ -200,6 +226,18 @@ impl FieldSelection {
                     snapshot.file_date.month,
                     snapshot.file_date.day,
                 ),
+            ));
+        }
+        if self.traits {
+            out.push(("traits", format_traits(&session.selected_traits())));
+        }
+        if self.hp {
+            out.push((
+                "hp",
+                session
+                    .current_hp()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
             ));
         }
 
@@ -288,6 +326,21 @@ impl FieldSelection {
                 )),
             );
         }
+        if self.traits {
+            out.insert(
+                "traits".to_string(),
+                traits_to_json(&session.selected_traits()),
+            );
+        }
+        if self.hp {
+            out.insert(
+                "hp".to_string(),
+                match session.current_hp() {
+                    Some(v) => JsonValue::from(v),
+                    None => JsonValue::Null,
+                },
+            );
+        }
 
         out
     }
@@ -303,13 +356,26 @@ fn main() {
     let requested_reputation_edit = cli.set_reputation;
     let requested_karma_edit = cli.set_karma;
     let requested_gender_edit = cli.set_gender.map(to_core_gender);
+    let special_edits: [(usize, Option<i32>); 7] = [
+        (0, cli.set_strength),
+        (1, cli.set_perception),
+        (2, cli.set_endurance),
+        (3, cli.set_charisma),
+        (4, cli.set_intelligence),
+        (5, cli.set_agility),
+        (6, cli.set_luck),
+    ];
+    let has_special_edits = special_edits.iter().any(|(_, v)| v.is_some());
+    let requested_hp_edit = cli.set_hp;
     let has_edits = requested_age_edit.is_some()
         || requested_level_edit.is_some()
         || requested_xp_edit.is_some()
         || requested_skill_points_edit.is_some()
         || requested_reputation_edit.is_some()
         || requested_karma_edit.is_some()
-        || requested_gender_edit.is_some();
+        || requested_gender_edit.is_some()
+        || has_special_edits
+        || requested_hp_edit.is_some();
 
     if has_edits && cli.output.is_none() {
         eprintln!("--set-* flags require --output <PATH>");
@@ -382,6 +448,20 @@ fn main() {
     if let Some(gender) = requested_gender_edit {
         session.set_gender(gender).unwrap_or_else(|e| {
             eprintln!("Error applying gender edit: {e}");
+            process::exit(1);
+        });
+    }
+    for &(stat_index, ref value) in &special_edits {
+        if let Some(v) = value {
+            session.set_base_stat(stat_index, *v).unwrap_or_else(|e| {
+                eprintln!("Error applying SPECIAL stat edit: {e}");
+                process::exit(1);
+            });
+        }
+    }
+    if let Some(hp) = requested_hp_edit {
+        session.set_hp(hp).unwrap_or_else(|e| {
+            eprintln!("Error applying HP edit: {e}");
             process::exit(1);
         });
     }
@@ -495,6 +575,26 @@ fn age_text(session: &Session) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+fn format_traits(traits: &[TraitEntry]) -> String {
+    if traits.is_empty() {
+        return "none".to_string();
+    }
+    traits
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn traits_to_json(traits: &[TraitEntry]) -> JsonValue {
+    JsonValue::Array(
+        traits
+            .iter()
+            .map(|t| JsonValue::String(t.name.clone()))
+            .collect(),
+    )
+}
+
 fn default_json(session: &Session) -> JsonMap<String, JsonValue> {
     let snapshot = session.snapshot();
     let mut out = JsonMap::new();
@@ -563,6 +663,17 @@ fn default_json(session: &Session) -> JsonMap<String, JsonValue> {
         "global_var_count".to_string(),
         JsonValue::from(snapshot.global_var_count),
     );
+    out.insert(
+        "traits".to_string(),
+        traits_to_json(&session.selected_traits()),
+    );
+    out.insert(
+        "hp".to_string(),
+        match session.current_hp() {
+            Some(v) => JsonValue::from(v),
+            None => JsonValue::Null,
+        },
+    );
 
     out
 }
@@ -585,6 +696,7 @@ fn print_fallout1_stats(save: &Fallout1SaveGame) {
         stats.level, stats.experience, stats.unspent_skill_points
     );
     println!("Karma: {}   Reputation: {}", stats.karma, stats.reputation);
+    print_selected_traits(&save.selected_traits, &fallout_core::fallout1::types::TRAIT_NAMES);
     println!();
 
     // S.P.E.C.I.A.L. (stats 0-6)
@@ -691,6 +803,7 @@ fn print_fallout2_stats(save: &Fallout2SaveGame) {
         stats.level, stats.experience, stats.unspent_skill_points
     );
     println!("Karma: {}   Reputation: {}", stats.karma, stats.reputation);
+    print_selected_traits(&save.selected_traits, &fallout_core::fallout2::types::TRAIT_NAMES);
     println!();
 
     println!("--- S.P.E.C.I.A.L. ---");
@@ -776,6 +889,17 @@ fn print_fallout2_stats(save: &Fallout2SaveGame) {
         println!("  - {}", file_name);
     }
     println!("Automap size: {} bytes", save.automap_size);
+}
+
+fn print_selected_traits(selected: &[i32; 2], names: &[&str]) {
+    let active: Vec<&str> = selected
+        .iter()
+        .filter(|&&v| v >= 0 && (v as usize) < names.len())
+        .map(|&v| names[v as usize])
+        .collect();
+    if !active.is_empty() {
+        println!("Traits: {}", active.join(", "));
+    }
 }
 
 fn month_to_name(month: i16) -> &'static str {

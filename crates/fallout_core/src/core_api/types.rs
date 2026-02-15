@@ -30,6 +30,8 @@ pub struct Snapshot {
     pub karma: i32,
     pub reputation: i32,
     pub global_var_count: usize,
+    pub selected_traits: [i32; 2],
+    pub hp: Option<i32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,4 +92,10 @@ pub struct KillCountEntry {
     pub index: usize,
     pub name: String,
     pub count: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraitEntry {
+    pub index: usize,
+    pub name: String,
 }

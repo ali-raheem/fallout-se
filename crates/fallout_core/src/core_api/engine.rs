@@ -9,7 +9,7 @@ use crate::gender::Gender;
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
     Capabilities, CapabilityIssue, DateParts, Game, KillCountEntry, PerkEntry, SkillEntry,
-    Snapshot, StatEntry,
+    Snapshot, StatEntry, TraitEntry,
 };
 
 const STAT_AGE_INDEX: usize = 33;
@@ -19,8 +19,8 @@ pub struct Engine;
 
 #[derive(Debug)]
 enum LoadedDocument {
-    Fallout1(fallout1::Document),
-    Fallout2(fallout2::Document),
+    Fallout1(Box<fallout1::Document>),
+    Fallout2(Box<fallout2::Document>),
 }
 
 #[derive(Debug)]
@@ -208,6 +208,25 @@ impl Session {
         }
     }
 
+    pub fn selected_traits(&self) -> Vec<TraitEntry> {
+        let traits = match &self.document {
+            LoadedDocument::Fallout1(doc) => doc.save.selected_traits,
+            LoadedDocument::Fallout2(doc) => doc.save.selected_traits,
+        };
+        let names = match &self.document {
+            LoadedDocument::Fallout1(_) => &f1_types::TRAIT_NAMES[..],
+            LoadedDocument::Fallout2(_) => &f2_types::TRAIT_NAMES[..],
+        };
+        traits
+            .iter()
+            .filter(|&&v| v >= 0 && (v as usize) < names.len())
+            .map(|&v| TraitEntry {
+                index: v as usize,
+                name: names[v as usize].to_string(),
+            })
+            .collect()
+    }
+
     pub fn nonzero_kill_counts(&self) -> Vec<KillCountEntry> {
         match &self.document {
             LoadedDocument::Fallout1(doc) => doc
@@ -281,6 +300,49 @@ impl Session {
             CoreError::new(
                 CoreErrorCode::Io,
                 format!("failed to emit modified bytes: {e}"),
+            )
+        })
+    }
+
+    pub fn current_hp(&self) -> Option<i32> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => extract_hp(&doc.save.player_object),
+            LoadedDocument::Fallout2(doc) => extract_hp(&doc.save.player_object),
+        }
+    }
+
+    pub fn set_hp(&mut self, hp: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_hp(hp),
+            LoadedDocument::Fallout2(doc) => doc.set_hp(hp),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set HP: {e}"),
+            )
+        })?;
+
+        self.snapshot.hp = Some(hp);
+        Ok(())
+    }
+
+    pub fn set_base_stat(&mut self, stat_index: usize, value: i32) -> Result<(), CoreError> {
+        if stat_index > 6 {
+            return Err(CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("invalid SPECIAL stat index {stat_index}, expected 0-6"),
+            ));
+        }
+
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_base_stat(stat_index, value),
+            LoadedDocument::Fallout2(doc) => doc.set_base_stat(stat_index, value),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set stat {stat_index}: {e}"),
             )
         })
     }
@@ -429,13 +491,15 @@ fn session_from_fallout1(doc: fallout1::Document) -> Session {
         karma: save.pc_stats.karma,
         reputation: save.pc_stats.reputation,
         global_var_count: save.global_var_count,
+        selected_traits: save.selected_traits,
+        hp: extract_hp(&save.player_object),
     };
 
     Session {
         game: Game::Fallout1,
         snapshot,
         capabilities: Capabilities::read_only(vec![CapabilityIssue::EditingNotImplemented]),
-        document: LoadedDocument::Fallout1(doc),
+        document: LoadedDocument::Fallout1(Box::new(doc)),
     }
 }
 
@@ -470,13 +534,22 @@ fn session_from_fallout2(doc: fallout2::Document) -> Session {
         karma: save.pc_stats.karma,
         reputation: save.pc_stats.reputation,
         global_var_count: save.global_var_count,
+        selected_traits: save.selected_traits,
+        hp: extract_hp(&save.player_object),
     };
 
     Session {
         game: Game::Fallout2,
         snapshot,
         capabilities: Capabilities::read_only(issues),
-        document: LoadedDocument::Fallout2(doc),
+        document: LoadedDocument::Fallout2(Box::new(doc)),
+    }
+}
+
+fn extract_hp(obj: &crate::object::GameObject) -> Option<i32> {
+    match &obj.object_data {
+        crate::object::ObjectData::Critter(data) => Some(data.hp),
+        _ => None,
     }
 }
 
