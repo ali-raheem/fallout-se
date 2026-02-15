@@ -1,6 +1,6 @@
-import init, { render_save_text } from "./fallout_web.js";
-
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
+
+let wasmBindings = null;
 
 const elements = {
   dropZone: document.getElementById("drop-zone"),
@@ -17,6 +17,7 @@ const state = {
   renderedText: "",
   outputFilename: "sheet.txt",
   ready: false,
+  initError: null,
 };
 
 function setStatus(message, kind = "info") {
@@ -58,8 +59,13 @@ function extractErrorMessage(error) {
 }
 
 async function renderFile(file) {
+  if (state.initError) {
+    setStatus(`WASM failed to load: ${state.initError}`, "error");
+    return;
+  }
+
   if (!state.ready) {
-    setStatus("WASM engine is still loading...", "error");
+    setStatus("WASM engine is still loading...", "info");
     return;
   }
 
@@ -88,7 +94,7 @@ async function renderFile(file) {
       metadata: null,
     };
 
-    const renderedText = render_save_text(bytes, options);
+    const renderedText = wasmBindings.render_save_text(bytes, options);
     setRenderedOutput(renderedText, normalizeFilename(file.name));
     setStatus(`Rendered ${file.name}.`, "ok");
   } catch (error) {
@@ -178,17 +184,44 @@ async function main() {
   resetOutput();
   setStatus("Loading WASM parser...", "info");
 
-  try {
-    await init();
+  // Wire the UI immediately so clicks/drops give feedback while WASM loads.
+  wireDragAndDrop();
+  wireControls();
+
+  // Trunk injects a bootstrap module that loads the wasm-bindgen bundle and then
+  // dispatches "TrunkApplicationStarted" with bindings exposed on window.
+  const onStarted = () => {
+    const bindings = window.wasmBindings;
+    if (!bindings || typeof bindings.render_save_text !== "function") {
+      state.initError = "Missing wasm bindings (render_save_text)";
+      setStatus(`Failed to initialize WASM module: ${state.initError}`, "error");
+      return;
+    }
+
+    wasmBindings = bindings;
     state.ready = true;
     setStatus("Drop a SAVE.DAT file to render.", "info");
-  } catch (error) {
-    setStatus(`Failed to initialize WASM module: ${extractErrorMessage(error)}`, "error");
+  };
+
+  if (window.wasmBindings) {
+    onStarted();
     return;
   }
 
-  wireDragAndDrop();
-  wireControls();
+  window.addEventListener(
+    "TrunkApplicationStarted",
+    () => {
+      try {
+        onStarted();
+      } catch (error) {
+        const message = extractErrorMessage(error);
+        state.initError = message;
+        console.error("Failed to initialize WASM module", error);
+        setStatus(`Failed to initialize WASM module: ${message}`, "error");
+      }
+    },
+    { once: true },
+  );
 }
 
 void main();

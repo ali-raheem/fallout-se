@@ -32,11 +32,23 @@ jobs:
         run: cargo install trunk --locked
 
       - name: Configure GitHub Pages
+        id: pages
         uses: actions/configure-pages@v5
+
+      - name: Compute Trunk public URL
+        id: trunk
+        shell: bash
+        run: |
+          base_path="${{ steps.pages.outputs.base_path }}"
+          if [ "$base_path" = "/" ] || [ -z "$base_path" ]; then
+            echo "public_url=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "public_url=${base_path%/}/" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build static web app
         working-directory: crates/fallout_web
-        run: trunk build --release --public-url "/${{ github.event.repository.name }}/"
+        run: trunk build --release --public-url "${{ steps.trunk.outputs.public_url }}"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
