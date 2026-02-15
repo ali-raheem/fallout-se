@@ -6,13 +6,15 @@ use crate::fallout2;
 use crate::fallout2::types as f2_types;
 use crate::gender::Gender;
 
+use super::ItemCatalog;
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
     Capabilities, CapabilityIssue, DateParts, Game, InventoryEntry, KillCountEntry, PerkEntry,
-    SkillEntry, Snapshot, StatEntry, TraitEntry,
+    ResolvedInventoryEntry, SkillEntry, Snapshot, StatEntry, TraitEntry,
 };
 
 const STAT_AGE_INDEX: usize = 33;
+const INVENTORY_CAPS_PID: i32 = -1;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;
@@ -372,6 +374,34 @@ impl Session {
                 pid: item.object.pid,
             })
             .collect()
+    }
+
+    pub fn inventory_resolved(&self, catalog: &ItemCatalog) -> Vec<ResolvedInventoryEntry> {
+        self.inventory()
+            .into_iter()
+            .map(|item| {
+                let meta = catalog.get(item.pid);
+                ResolvedInventoryEntry {
+                    quantity: item.quantity,
+                    pid: item.pid,
+                    name: meta.map(|entry| entry.name.clone()),
+                    base_weight: meta.map(|entry| entry.base_weight),
+                    item_type: meta.map(|entry| entry.item_type),
+                }
+            })
+            .collect()
+    }
+
+    pub fn inventory_total_weight_lbs(&self, catalog: &ItemCatalog) -> Option<i32> {
+        let mut total = 0i64;
+        for item in self.inventory() {
+            if item.pid == INVENTORY_CAPS_PID {
+                continue;
+            }
+            let meta = catalog.get(item.pid)?;
+            total = total.checked_add(i64::from(item.quantity) * i64::from(meta.base_weight))?;
+        }
+        i32::try_from(total).ok()
     }
 
     pub fn to_bytes_unmodified(&self) -> Result<Vec<u8>, CoreError> {

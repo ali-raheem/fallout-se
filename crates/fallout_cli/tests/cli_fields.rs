@@ -106,8 +106,34 @@ fn cli_default_text_includes_detailed_sections() {
     assert!(stdout.contains("::: Kills :::"));
     assert!(stdout.contains("Man: 42"));
     assert!(stdout.contains(" ::: Inventory :::"));
+    assert!(stdout.contains("Caps: 2,967"));
     assert!(stdout.contains("Total Weight:"));
     assert!(stdout.contains("pid="));
+    assert!(!stdout.contains("pid=FFFFFFFF"));
+}
+
+#[test]
+fn cli_warns_when_item_metadata_is_unavailable() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&[&path]);
+    assert!(output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(
+        "Item names/weights require game data files. Provide installation directory with --install-dir, e.g. --install-dir \"C:/Games/Fallout/\"."
+    ));
+}
+
+#[test]
+fn cli_does_not_warn_for_non_inventory_field_mode() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--gender", &path]);
+    assert!(output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("Item names/weights require game data files."));
 }
 
 #[test]

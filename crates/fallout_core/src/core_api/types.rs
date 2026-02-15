@@ -41,6 +41,23 @@ pub struct InventoryEntry {
     pub pid: i32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemCatalogEntry {
+    pub pid: i32,
+    pub name: String,
+    pub base_weight: i32,
+    pub item_type: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedInventoryEntry {
+    pub quantity: i32,
+    pub pid: i32,
+    pub name: Option<String>,
+    pub base_weight: Option<i32>,
+    pub item_type: Option<i32>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CapabilityIssue {
     EditingNotImplemented,

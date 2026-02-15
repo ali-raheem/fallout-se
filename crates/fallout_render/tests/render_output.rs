@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use fallout_core::core_api::{Engine, Session};
+use fallout_core::core_api::{Engine, ResolvedInventoryEntry, Session};
 use fallout_render::{
     FieldSelection, JsonStyle, TextRenderOptions, render_classic_sheet,
-    render_classic_sheet_with_options, render_json_full, render_json_selected,
+    render_classic_sheet_with_inventory, render_classic_sheet_with_options, render_json_full,
+    render_json_full_with_inventory, render_json_selected,
 };
 use serde_json::Value;
 
@@ -145,8 +146,10 @@ fn classic_sheet_includes_plain_text_detail_sections() {
     assert!(rendered.contains("::: Kills :::"));
     assert!(rendered.contains("Man: 42"));
     assert!(rendered.contains(" ::: Inventory :::"));
+    assert!(rendered.contains("Caps: 2,967"));
     assert!(rendered.contains("Total Weight:"));
     assert!(rendered.contains("pid="));
+    assert!(!rendered.contains("pid=FFFFFFFF"));
 }
 
 #[test]
@@ -160,4 +163,55 @@ fn classic_sheet_verbose_includes_zero_kill_counts() {
         .find(|entry| entry.count == 0)
         .expect("fixture should have at least one zero kill count");
     assert!(rendered.contains(&format!("{}: 0", zero_kill.name)));
+}
+
+#[test]
+fn json_inventory_can_include_resolved_item_metadata() {
+    let session = session_from_path(fallout1_save_path(1));
+    let resolved: Vec<ResolvedInventoryEntry> = session
+        .inventory()
+        .into_iter()
+        .map(|item| ResolvedInventoryEntry {
+            quantity: item.quantity,
+            pid: item.pid,
+            name: Some(format!("Item {}", item.pid)),
+            base_weight: Some(1),
+            item_type: Some(0),
+        })
+        .collect();
+
+    let value = render_json_full_with_inventory(&session, JsonStyle::CanonicalV1, Some(&resolved));
+    let inventory = value["inventory"]
+        .as_array()
+        .expect("inventory should be an array");
+    assert!(!inventory.is_empty());
+    assert!(inventory[0].get("name").is_some());
+    assert!(inventory[0].get("base_weight").is_some());
+    assert!(inventory[0].get("item_type").is_some());
+}
+
+#[test]
+fn classic_sheet_can_include_resolved_inventory_and_total_weight() {
+    let session = session_from_path(fallout1_save_path(1));
+    let resolved: Vec<ResolvedInventoryEntry> = session
+        .inventory()
+        .into_iter()
+        .map(|item| ResolvedInventoryEntry {
+            quantity: item.quantity,
+            pid: item.pid,
+            name: Some(format!("Item {}", item.pid)),
+            base_weight: Some(2),
+            item_type: Some(0),
+        })
+        .collect();
+
+    let rendered = render_classic_sheet_with_inventory(
+        &session,
+        TextRenderOptions::default(),
+        Some(&resolved),
+        Some(123),
+    );
+    let carry_weight = session.stat(12).total;
+    assert!(rendered.contains(&format!("Total Weight: 123/{carry_weight} lbs.")));
+    assert!(rendered.contains("(2 lbs.)"));
 }

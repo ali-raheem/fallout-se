@@ -1,8 +1,8 @@
 use std::fmt::Write as _;
 
 use fallout_core::core_api::{
-    Game as CoreGame, InventoryEntry, KillCountEntry, PerkEntry, Session, SkillEntry, StatEntry,
-    TraitEntry,
+    Game as CoreGame, InventoryEntry, KillCountEntry, PerkEntry, ResolvedInventoryEntry, Session,
+    SkillEntry, StatEntry, TraitEntry,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -14,6 +14,7 @@ const TWO_COL_WIDTH_RIGHT: usize = 44;
 const INVENTORY_COL_WIDTH_A: usize = 25;
 const INVENTORY_COL_WIDTH_B: usize = 25;
 const INVENTORY_COL_WIDTH_C: usize = 23;
+const INVENTORY_CAPS_PID: i32 = -1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonStyle {
@@ -90,8 +91,16 @@ impl FieldSelection {
 }
 
 pub fn render_json_full(session: &Session, style: JsonStyle) -> JsonValue {
+    render_json_full_with_inventory(session, style, None)
+}
+
+pub fn render_json_full_with_inventory(
+    session: &Session,
+    style: JsonStyle,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+) -> JsonValue {
     match style {
-        JsonStyle::CanonicalV1 => JsonValue::Object(default_json(session)),
+        JsonStyle::CanonicalV1 => JsonValue::Object(default_json(session, inventory)),
     }
 }
 
@@ -100,13 +109,22 @@ pub fn render_json_selected(
     fields: &FieldSelection,
     style: JsonStyle,
 ) -> JsonValue {
+    render_json_selected_with_inventory(session, fields, style, None)
+}
+
+pub fn render_json_selected_with_inventory(
+    session: &Session,
+    fields: &FieldSelection,
+    style: JsonStyle,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+) -> JsonValue {
     match style {
-        JsonStyle::CanonicalV1 => JsonValue::Object(selected_json(fields, session)),
+        JsonStyle::CanonicalV1 => JsonValue::Object(selected_json(fields, session, inventory)),
     }
 }
 
 pub fn render_classic_sheet(session: &Session) -> String {
-    render_classic_sheet_with_options(session, TextRenderOptions::default())
+    render_classic_sheet_with_inventory(session, TextRenderOptions::default(), None, None)
 }
 
 pub fn render_text(session: &Session, style: TextStyle) -> String {
@@ -114,7 +132,16 @@ pub fn render_text(session: &Session, style: TextStyle) -> String {
 }
 
 pub fn render_classic_sheet_with_options(session: &Session, options: TextRenderOptions) -> String {
-    render_text_with_options(session, TextStyle::ClassicFallout, options)
+    render_classic_sheet_with_inventory(session, options, None, None)
+}
+
+pub fn render_classic_sheet_with_inventory(
+    session: &Session,
+    options: TextRenderOptions,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+    total_weight_lbs: Option<i32>,
+) -> String {
+    render_classic_sheet_impl(session, options, inventory, total_weight_lbs)
 }
 
 pub fn render_text_with_options(
@@ -123,11 +150,15 @@ pub fn render_text_with_options(
     options: TextRenderOptions,
 ) -> String {
     match style {
-        TextStyle::ClassicFallout => render_classic_sheet_impl(session, options),
+        TextStyle::ClassicFallout => render_classic_sheet_impl(session, options, None, None),
     }
 }
 
-fn selected_json(fields: &FieldSelection, session: &Session) -> JsonMap<String, JsonValue> {
+fn selected_json(
+    fields: &FieldSelection,
+    session: &Session,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+) -> JsonMap<String, JsonValue> {
     let snapshot = session.snapshot();
     let mut out = JsonMap::new();
 
@@ -248,13 +279,19 @@ fn selected_json(fields: &FieldSelection, session: &Session) -> JsonMap<String, 
         out.insert("kill_counts".to_string(), kill_counts_to_json(session));
     }
     if fields.inventory {
-        out.insert("inventory".to_string(), inventory_to_json(session));
+        out.insert(
+            "inventory".to_string(),
+            inventory_to_json(session, inventory),
+        );
     }
 
     out
 }
 
-fn default_json(session: &Session) -> JsonMap<String, JsonValue> {
+fn default_json(
+    session: &Session,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+) -> JsonMap<String, JsonValue> {
     let snapshot = session.snapshot();
     let mut out = JsonMap::new();
 
@@ -341,7 +378,10 @@ fn default_json(session: &Session) -> JsonMap<String, JsonValue> {
     );
     out.insert("skills".to_string(), skills_to_json(session));
     out.insert("kill_counts".to_string(), kill_counts_to_json(session));
-    out.insert("inventory".to_string(), inventory_to_json(session));
+    out.insert(
+        "inventory".to_string(),
+        inventory_to_json(session, inventory),
+    );
 
     out
 }
@@ -421,7 +461,30 @@ fn kill_counts_to_json(session: &Session) -> JsonValue {
     )
 }
 
-fn inventory_to_json(session: &Session) -> JsonValue {
+fn inventory_to_json(session: &Session, resolved: Option<&[ResolvedInventoryEntry]>) -> JsonValue {
+    if let Some(items) = resolved {
+        return JsonValue::Array(
+            items
+                .iter()
+                .map(|item| {
+                    let mut m = JsonMap::new();
+                    m.insert("quantity".to_string(), JsonValue::from(item.quantity));
+                    m.insert("pid".to_string(), JsonValue::from(item.pid));
+                    if let Some(name) = &item.name {
+                        m.insert("name".to_string(), JsonValue::String(name.clone()));
+                    }
+                    if let Some(base_weight) = item.base_weight {
+                        m.insert("base_weight".to_string(), JsonValue::from(base_weight));
+                    }
+                    if let Some(item_type) = item.item_type {
+                        m.insert("item_type".to_string(), JsonValue::from(item_type));
+                    }
+                    JsonValue::Object(m)
+                })
+                .collect(),
+        );
+    }
+
     JsonValue::Array(
         session
             .inventory()
@@ -445,7 +508,12 @@ fn traits_to_json(traits: &[TraitEntry]) -> JsonValue {
     )
 }
 
-fn render_classic_sheet_impl(session: &Session, options: TextRenderOptions) -> String {
+fn render_classic_sheet_impl(
+    session: &Session,
+    options: TextRenderOptions,
+    resolved_inventory: Option<&[ResolvedInventoryEntry]>,
+    total_weight_lbs: Option<i32>,
+) -> String {
     let snapshot = session.snapshot();
 
     let title = match session.game() {
@@ -642,7 +710,13 @@ fn render_classic_sheet_impl(session: &Session, options: TextRenderOptions) -> S
     writeln!(&mut out).expect("writing to String cannot fail");
     write_skills_kills_grid(&mut out, &skills, &kills);
     writeln!(&mut out).expect("writing to String cannot fail");
-    write_inventory_section(&mut out, &inventory, None);
+    write_inventory_section(
+        session,
+        &mut out,
+        &inventory,
+        resolved_inventory,
+        total_weight_lbs,
+    );
     writeln!(&mut out).expect("writing to String cannot fail");
 
     out
@@ -749,36 +823,73 @@ fn write_skills_kills_grid(out: &mut String, skills: &[SkillEntry], kills: &[Kil
 }
 
 fn write_inventory_section(
+    session: &Session,
     out: &mut String,
     inventory: &[InventoryEntry],
+    resolved_inventory: Option<&[ResolvedInventoryEntry]>,
     total_weight_lbs: Option<i32>,
 ) {
     writeln!(out, " ::: Inventory :::").expect("writing to String cannot fail");
     writeln!(out).expect("writing to String cannot fail");
 
+    let caps = inventory
+        .iter()
+        .filter(|entry| entry.pid == INVENTORY_CAPS_PID)
+        .fold(0i64, |sum, entry| sum + i64::from(entry.quantity));
+    writeln!(
+        out,
+        "{:>52}",
+        format!("Caps: {}", format_number_with_commas_i64(caps))
+    )
+    .expect("writing to String cannot fail");
+
+    let carry_weight_lbs = session.stat(12).total;
     let total_weight_label = match total_weight_lbs {
-        Some(value) => format!("{value} lbs."),
-        None => "unknown".to_string(),
+        Some(value) => format!("{value}/{carry_weight_lbs} lbs."),
+        None => format!("unknown/{carry_weight_lbs} lbs."),
     };
     writeln!(out, "{:>52}", format!("Total Weight: {total_weight_label}"))
         .expect("writing to String cannot fail");
     writeln!(out).expect("writing to String cannot fail");
 
-    if inventory.is_empty() {
+    let rows: Vec<String> = if let Some(resolved) = resolved_inventory {
+        resolved
+            .iter()
+            .filter(|entry| entry.pid != INVENTORY_CAPS_PID)
+            .map(|entry| {
+                if let (Some(name), Some(base_weight)) = (&entry.name, entry.base_weight) {
+                    format!(
+                        "{}x {} ({} lbs.)",
+                        format_number_with_commas(entry.quantity),
+                        name,
+                        base_weight
+                    )
+                } else {
+                    format!(
+                        "{}x pid={:08X}",
+                        format_number_with_commas(entry.quantity),
+                        entry.pid as u32
+                    )
+                }
+            })
+            .collect()
+    } else {
+        inventory
+            .iter()
+            .filter(|entry| entry.pid != INVENTORY_CAPS_PID)
+            .map(|entry| {
+                format!(
+                    "{}x pid={:08X}",
+                    format_number_with_commas(entry.quantity),
+                    entry.pid as u32
+                )
+            })
+            .collect()
+    };
+    if rows.is_empty() {
         writeln!(out, "  none").expect("writing to String cannot fail");
         return;
     }
-
-    let rows: Vec<String> = inventory
-        .iter()
-        .map(|entry| {
-            format!(
-                "{}x pid={:08X}",
-                format_number_with_commas(entry.quantity),
-                entry.pid as u32
-            )
-        })
-        .collect();
 
     for chunk in rows.chunks(3) {
         let col1 = chunk.first().map(String::as_str).unwrap_or("");
@@ -834,8 +945,12 @@ fn format_game_time(game_time: u32) -> String {
 }
 
 fn format_number_with_commas(n: i32) -> String {
+    format_number_with_commas_i64(i64::from(n))
+}
+
+fn format_number_with_commas_i64(n: i64) -> String {
     if n < 0 {
-        return format!("-{}", format_number_with_commas(-n));
+        return format!("-{}", format_number_with_commas_i64(-n));
     }
     let s = n.to_string();
     let mut result = String::with_capacity(s.len() + s.len() / 3);

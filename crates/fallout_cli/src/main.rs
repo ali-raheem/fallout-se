@@ -8,15 +8,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use fallout_core::core_api::{
-    Capabilities, CapabilityIssue, Engine, Game as CoreGame, Session, TraitEntry,
+    Capabilities, CapabilityIssue, Engine, Game as CoreGame, ItemCatalog, ResolvedInventoryEntry,
+    Session, TraitEntry, detect_install_dir_from_save_path,
 };
 use fallout_core::fallout1;
 use fallout_core::fallout2;
 use fallout_core::gender::Gender;
 use fallout_core::layout::{FileLayout, SectionId};
 use fallout_render::{
-    FieldSelection as RenderFieldSelection, JsonStyle, TextRenderOptions, render_classic_sheet,
-    render_classic_sheet_with_options, render_json_full, render_json_selected,
+    FieldSelection as RenderFieldSelection, JsonStyle, TextRenderOptions,
+    render_classic_sheet_with_inventory, render_json_full_with_inventory,
+    render_json_selected_with_inventory,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -160,6 +162,8 @@ struct Cli {
 
     #[arg(value_name = "SAVE.DAT")]
     path: Option<PathBuf>,
+    #[arg(long, value_name = "INSTALL_DIR")]
+    install_dir: Option<PathBuf>,
     #[arg(
         long,
         value_name = "1|2|fo1|fo2|fallout1|fallout2",
@@ -384,7 +388,11 @@ impl FieldSelection {
             || self.inventory
     }
 
-    fn selected_pairs(&self, session: &Session) -> Vec<(&'static str, String)> {
+    fn selected_pairs(
+        &self,
+        session: &Session,
+        resolved_inventory: Option<&[ResolvedInventoryEntry]>,
+    ) -> Vec<(&'static str, String)> {
         let snapshot = session.snapshot();
         let mut out = Vec::new();
 
@@ -494,9 +502,25 @@ impl FieldSelection {
             }
         }
         if self.inventory {
-            let items = session.inventory();
-            for item in &items {
-                out.push(("inventory", format!("{}x pid={}", item.quantity, item.pid)));
+            if let Some(items) = resolved_inventory {
+                for item in items {
+                    if let (Some(name), Some(base_weight)) = (&item.name, item.base_weight) {
+                        out.push((
+                            "inventory",
+                            format!(
+                                "{}x {} ({} lbs.) pid={}",
+                                item.quantity, name, base_weight, item.pid
+                            ),
+                        ));
+                    } else {
+                        out.push(("inventory", format!("{}x pid={}", item.quantity, item.pid)));
+                    }
+                }
+            } else {
+                let items = session.inventory();
+                for item in &items {
+                    out.push(("inventory", format!("{}x pid={}", item.quantity, item.pid)));
+                }
             }
         }
 
@@ -802,11 +826,46 @@ fn main() {
                 });
     }
 
+    let output_uses_inventory = if cli.json {
+        if fields.is_field_mode() {
+            fields.inventory
+        } else {
+            true
+        }
+    } else if fields.is_field_mode() {
+        fields.inventory
+    } else {
+        cli.output.is_none()
+    };
+
+    let mut resolved_inventory = None;
+    let mut total_weight_lbs = None;
+    if output_uses_inventory {
+        let catalog = load_item_catalog(path, cli.install_dir.as_deref());
+        if let Ok(catalog) = catalog {
+            resolved_inventory = Some(session.inventory_resolved(&catalog));
+            total_weight_lbs = session.inventory_total_weight_lbs(&catalog);
+        } else {
+            eprintln!(
+                "Item names/weights require game data files. Provide installation directory with --install-dir, e.g. --install-dir \"C:/Games/Fallout/\"."
+            );
+        }
+    }
+
     if cli.json {
         let json = if fields.is_field_mode() {
-            render_json_selected(&session, &fields.to_renderer(), JsonStyle::CanonicalV1)
+            render_json_selected_with_inventory(
+                &session,
+                &fields.to_renderer(),
+                JsonStyle::CanonicalV1,
+                resolved_inventory.as_deref(),
+            )
         } else {
-            render_json_full(&session, JsonStyle::CanonicalV1)
+            render_json_full_with_inventory(
+                &session,
+                JsonStyle::CanonicalV1,
+                resolved_inventory.as_deref(),
+            )
         };
         print_json(&json).unwrap_or_else(|e| {
             eprintln!("Error rendering JSON output: {e}");
@@ -816,7 +875,7 @@ fn main() {
     }
 
     if fields.is_field_mode() {
-        for (key, value) in fields.selected_pairs(&session) {
+        for (key, value) in fields.selected_pairs(&session, resolved_inventory.as_deref()) {
             println!("{key}={value}");
         }
         return;
@@ -834,10 +893,23 @@ fn main() {
     if cli.verbose {
         print!(
             "{}",
-            render_classic_sheet_with_options(&session, TextRenderOptions { verbose: true })
+            render_classic_sheet_with_inventory(
+                &session,
+                TextRenderOptions { verbose: true },
+                resolved_inventory.as_deref(),
+                total_weight_lbs,
+            )
         );
     } else {
-        print!("{}", render_classic_sheet(&session));
+        print!(
+            "{}",
+            render_classic_sheet_with_inventory(
+                &session,
+                TextRenderOptions::default(),
+                resolved_inventory.as_deref(),
+                total_weight_lbs,
+            )
+        );
     }
 }
 
@@ -1862,6 +1934,22 @@ fn resolve_hint(game: Option<GameKind>, fallout1: bool, fallout2: bool) -> Optio
         None
     })
     .map(to_core_game)
+}
+
+fn load_item_catalog(
+    save_path: &Path,
+    install_dir_override: Option<&Path>,
+) -> Result<ItemCatalog, String> {
+    if let Some(install_dir) = install_dir_override {
+        return ItemCatalog::load_from_install_dir(install_dir).map_err(|e| e.to_string());
+    }
+    let install_dir = detect_install_dir_from_save_path(save_path).ok_or_else(|| {
+        format!(
+            "failed to auto-detect install dir from {}",
+            save_path.display()
+        )
+    })?;
+    ItemCatalog::load_from_install_dir(&install_dir).map_err(|e| e.to_string())
 }
 
 fn to_core_gender(gender: GenderArg) -> Gender {

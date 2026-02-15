@@ -20,6 +20,10 @@ This project is still a work in progress. If a save does not parse or dump corre
 - **Game-style character sheet** — default text output matches the Fallout in-game print screen and now includes gameplay detail sections (karma/reputation, skills, kills, inventory).
 - **Comprehensive JSON output** with `--json` — includes SPECIAL stats, derived stats, skills, perks, kill counts, inventory, game time, max HP, next level XP.
 - **Query individual fields** — `--name`, `--description`, `--gender`, `--age`, `--level`, `--xp`, `--karma`, `--reputation`, `--skill-points`, `--map`, `--game-date`, `--save-date`, `--hp`, `--max-hp`, `--next-level-xp`, `--game-time`, `--special`, `--derived-stats`, `--skills`, `--perks`, `--kills`, `--inventory`, `--traits`.
+- Optional inventory item metadata (name/base weight) loaded from game data files when available:
+  - Auto-detect install root from the `SAVE.DAT` location when possible.
+  - Manual override via `--install-dir "C:/Games/Fallout/"`.
+  - Falls back to PID-only inventory output when metadata cannot be loaded.
 - `--verbose` for exhaustive plain-text lists (including zero-count kill types).
 - Safe edits written to a new file via `--output`:
   - `--set-gender`, `--set-age`, `--set-level`, `--set-xp`
@@ -86,6 +90,12 @@ JSON output (all data):
 
 ```bash
 fallout-se --json path/to/SAVE.DAT
+```
+
+JSON output with explicit game install metadata path:
+
+```bash
+fallout-se --json --install-dir "C:/Games/Fallout/" path/to/SAVE.DAT
 ```
 
 Selective JSON:

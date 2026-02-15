@@ -11,3 +11,4 @@ description = "Core save parsing/query library for Fallout 1 & 2"
 name = "fallout_core"
 
 [dependencies]
+flate2 = "1.1"
