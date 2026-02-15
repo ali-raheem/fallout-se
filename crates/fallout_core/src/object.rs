@@ -113,7 +113,7 @@ impl GameObject {
         let inventory_capacity = r.read_i32()?;
         let _placeholder = r.read_i32()?;
 
-        if !(0..=1000).contains(&inventory_length) {
+        if !(-1..=1000).contains(&inventory_length) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
@@ -149,9 +149,10 @@ impl GameObject {
             }
         };
 
-        // Recursive inventory
-        let mut inventory = Vec::with_capacity(inventory_length.min(1000) as usize);
-        for _ in 0..inventory_length {
+        // Fallout saves can contain inventory_length == -1; treat as empty.
+        let normalized_inventory_length = inventory_length.max(0);
+        let mut inventory = Vec::with_capacity(normalized_inventory_length as usize);
+        for _ in 0..normalized_inventory_length {
             let quantity = r.read_i32()?;
             let object = GameObject::parse(r)?;
             inventory.push(InventoryItem { quantity, object });
@@ -297,4 +298,55 @@ fn parse_misc_object_data<R: Read + Seek>(
         elevation: r.read_i32()?,
         rotation: r.read_i32()?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::GameObject;
+    use crate::reader::BigEndianReader;
+
+    #[test]
+    fn parse_object_allows_negative_one_inventory_length() {
+        let mut bytes = Vec::new();
+
+        // 18 base object fields.
+        for v in [
+            1i32,
+            100,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0x20000001, // PID type 2 (scenery)
+            -1,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+        ] {
+            bytes.extend_from_slice(&v.to_be_bytes());
+        }
+
+        // Inventory header.
+        bytes.extend_from_slice(&(-1i32).to_be_bytes());
+        bytes.extend_from_slice(&(0i32).to_be_bytes());
+        bytes.extend_from_slice(&(0i32).to_be_bytes());
+
+        // Scenery/object flags field.
+        bytes.extend_from_slice(&(0i32).to_be_bytes());
+
+        let mut reader = BigEndianReader::new(Cursor::new(bytes));
+        let parsed = GameObject::parse(&mut reader).expect("object should parse");
+
+        assert_eq!(parsed.inventory_length, -1);
+        assert!(parsed.inventory.is_empty());
+    }
 }

@@ -443,10 +443,15 @@ fn parse_internal<R: Read + Seek>(
 
     // Handlers 14-16: try to parse traits; fall back to [-1, -1] on failure.
     let pre_traits_pos = r.position()?;
+    let pre_traits_capture_len = capture.as_deref().map(|c| c.sections.len());
     let selected_traits = match parse_handlers_14_to_16(r, &mut capture) {
         Ok(traits) => traits,
         Err(_) => {
             r.seek_to(pre_traits_pos)?;
+            if let (Some(c), Some(len)) = (capture.as_deref_mut(), pre_traits_capture_len) {
+                c.sections.truncate(len);
+                c.blobs.truncate(len);
+            }
             [-1, -1]
         }
     };
