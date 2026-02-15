@@ -846,9 +846,8 @@ fn main() {
             resolved_inventory = Some(session.inventory_resolved(&catalog));
             total_weight_lbs = session.inventory_total_weight_lbs(&catalog);
         } else {
-            eprintln!(
-                "Item names/weights require game data files. Provide installation directory with --install-dir, e.g. --install-dir \"C:/Games/Fallout/\"."
-            );
+            // Fall back to built-in well-known item names
+            resolved_inventory = Some(session.inventory_resolved_builtin());
         }
     }
 

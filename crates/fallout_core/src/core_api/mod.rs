@@ -2,6 +2,7 @@ mod engine;
 mod error;
 mod item_catalog;
 mod types;
+pub mod well_known_items;
 
 pub use engine::{Engine, Session};
 pub use error::{CoreError, CoreErrorCode};

@@ -6,6 +6,8 @@ I started this project because the most popular save file editor, [Falche](https
 
 I also found [Ultimate Fallout 1 & 2 Save File Editor (F12se)](https://github.com/nousrnam/F12se), which is open source but still Windows-focused.
 
+The community editions of Fallout, [fallout1-ce](https://github.com/alexbatalov/fallout1-ce) and [fallout2-ce](https://github.com.alexbatalov/fallout2-ce) which are clean room reimplimentations by Alex Batalov.
+
 This project is still a work in progress. If a save does not parse or dump correctly, please submit the file (or a minimal repro) so support can be improved.
 
 ## Project Goals

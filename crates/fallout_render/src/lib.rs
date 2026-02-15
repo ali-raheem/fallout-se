@@ -14,7 +14,7 @@ const TWO_COL_WIDTH_RIGHT: usize = 44;
 const INVENTORY_COL_WIDTH_A: usize = 25;
 const INVENTORY_COL_WIDTH_B: usize = 25;
 const INVENTORY_COL_WIDTH_C: usize = 23;
-const INVENTORY_CAPS_PID: i32 = -1;
+const INVENTORY_CAPS_PID: i32 = 41;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonStyle {
@@ -639,7 +639,7 @@ fn render_classic_sheet_impl(
     let max_hp = session.max_hp();
 
     for row in 0..7 {
-        let special_val = session.stat(row).total;
+        let stat = session.stat(row);
         let mut line = String::with_capacity(80);
         let left_pad = 15 - special_names[row].len();
         for _ in 0..left_pad {
@@ -647,7 +647,12 @@ fn render_classic_sheet_impl(
         }
         line.push_str(special_names[row]);
         line.push_str(": ");
-        line.push_str(&format!("{:02}", special_val));
+        if stat.bonus != 0 {
+            write!(line, "{:02} ({:+})", stat.total, stat.bonus)
+                .expect("writing to String cannot fail");
+        } else {
+            write!(line, "{:02}", stat.total).expect("writing to String cannot fail");
+        }
 
         let mid = &middle_cols[row];
         let mid_val = match row {
@@ -857,12 +862,11 @@ fn write_inventory_section(
             .iter()
             .filter(|entry| entry.pid != INVENTORY_CAPS_PID)
             .map(|entry| {
-                if let (Some(name), Some(base_weight)) = (&entry.name, entry.base_weight) {
+                if let Some(name) = &entry.name {
                     format!(
-                        "{}x {} ({} lbs.)",
+                        "{}x {}",
                         format_number_with_commas(entry.quantity),
                         name,
-                        base_weight
                     )
                 } else {
                     format!(

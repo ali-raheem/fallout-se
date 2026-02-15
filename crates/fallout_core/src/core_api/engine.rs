@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const STAT_AGE_INDEX: usize = 33;
-const INVENTORY_CAPS_PID: i32 = 41;
+const INVENTORY_CAPS_PID: i32 = -1;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;
@@ -387,6 +387,25 @@ impl Session {
                     name: meta.map(|entry| entry.name.clone()),
                     base_weight: meta.map(|entry| entry.base_weight),
                     item_type: meta.map(|entry| entry.item_type),
+                }
+            })
+            .collect()
+    }
+
+    /// Resolve inventory using the built-in well-known item table.
+    /// Falls back to pid-only entries for items not in the table.
+    pub fn inventory_resolved_builtin(&self) -> Vec<ResolvedInventoryEntry> {
+        let game = self.game();
+        self.inventory()
+            .into_iter()
+            .map(|item| {
+                let known = super::well_known_items::lookup(game, item.pid);
+                ResolvedInventoryEntry {
+                    quantity: item.quantity,
+                    pid: item.pid,
+                    name: known.map(|(name, _)| name.to_string()),
+                    base_weight: known.map(|(_, w)| w),
+                    item_type: None,
                 }
             })
             .collect()

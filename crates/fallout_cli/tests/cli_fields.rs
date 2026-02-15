@@ -113,16 +113,18 @@ fn cli_default_text_includes_detailed_sections() {
 }
 
 #[test]
-fn cli_warns_when_item_metadata_is_unavailable() {
+fn cli_uses_builtin_item_names_without_install_dir() {
     let path = fallout1_save_path(1);
     let path = path.to_string_lossy().to_string();
     let output = run_cli(&[&path]);
     assert!(output.status.success());
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Stimpak"));
+    assert!(stdout.contains("Bottle Caps") || stdout.contains("Caps: "));
+
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains(
-        "Item names/weights require game data files. Provide installation directory with --install-dir, e.g. --install-dir \"C:/Games/Fallout/\"."
-    ));
+    assert!(!stderr.contains("Item names/weights require game data files"));
 }
 
 #[test]
