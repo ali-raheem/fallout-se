@@ -12,6 +12,8 @@ The community editions of Fallout, [fallout1-ce](https://github.com/alexbatalov/
 
 This project is still a work in progress. If a save does not parse or dump correctly, please submit the file (or a minimal repro) so support can be improved.
 
+If you have a source to clean room, or otherwise license/copyright free PID names and weights that would be hugely helpful. The easiest way to do this is to match up your output with that produced by the game (when you PRINT your character sheet).
+
 ## Project Goals
 - Parity with Falche where practical.
 - Solid core library first.
@@ -158,41 +160,6 @@ fallout-se debug section --id handler:13 --hex path/to/SAVE.DAT
 # compare two saves
 fallout-se debug compare --json path/to/A.DAT path/to/B.DAT
 ```
-
-## Web App (Static Read-Only Viewer)
-
-The project also includes a static web frontend (`crates/fallout_web`) that runs entirely in
-the browser with WebAssembly.
-
-Current scope:
-- Read-only parsing of dropped `SAVE.DAT` files.
-- Classic Fallout-style text output in a fixed-width block.
-- Copy-to-clipboard and `.txt` download.
-
-Not in scope yet:
-- Save editing.
-- Game-install metadata upload for item name/weight enrichment.
-
-### Local Development
-
-```bash
-rustup target add wasm32-unknown-unknown
-cargo web-check
-cargo web-test
-cargo web-wasm
-```
-
-### Production Build
-
-```bash
-cargo web-wasm
-```
-
-The generated artifact is:
-
-`target/wasm32-unknown-unknown/release/fallout_web.wasm`
-
-If you still want the full static HTML/JS bundle route with Trunk, use the workflow in `.github/workflows/web-pages.yml`.
 
 ## License
 Dual-licensed under MIT OR Apache-2.0.

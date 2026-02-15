@@ -84,13 +84,14 @@ fn render_save_text_impl(
     let session = engine
         .open_bytes(save_bytes, game_hint)
         .map_err(|err| WebError::new("parse_failed", err.to_string()))?;
+    let resolved_inventory = session.inventory_resolved_builtin();
 
     Ok(render_classic_sheet_with_inventory(
         &session,
         TextRenderOptions {
             verbose: options.verbose,
         },
-        None,
+        Some(&resolved_inventory),
         None,
     ))
 }
