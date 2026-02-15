@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base data-trunk-public-url />
+    <title>Fallout Save Viewer</title>
+    <link data-trunk rel="rust" />
+    <script data-trunk src="index.js" type="module"></script>
+    <style>
+      :root {
+        --bg-top: #0a1218;
+        --bg-bottom: #06131a;
+        --panel: #0f2230cc;
+        --panel-border: #2a586f;
+        --text: #d9f5ff;
+        --muted: #84a9b8;
+        --accent: #6ee7f5;
+        --ok: #6ddf9f;
+        --error: #ff857d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 28px;
+        font-family: "Iosevka Fixed", "JetBrains Mono", "Cascadia Mono", monospace;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 15% 20%, #18435a66 0%, transparent 45%),
+          radial-gradient(circle at 85% 10%, #135a5a44 0%, transparent 40%),
+          linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+      }
+
+      .frame {
+        max-width: 1024px;
+        margin: 0 auto;
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        background: var(--panel);
+        box-shadow: 0 18px 52px #00000066;
+        overflow: hidden;
+      }
+
+      .header {
+        padding: 20px 24px 10px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 1.55rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .sub {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 24px 18px;
+      }
+
+      .drop-zone {
+        width: 100%;
+        border: 1px dashed #6ee7f577;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        background: #08161f88;
+        color: var(--muted);
+        transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+      }
+
+      .drop-zone.active {
+        border-color: var(--accent);
+        background: #0b243088;
+        color: var(--text);
+        transform: translateY(-1px);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      button {
+        border: 1px solid #4a7a8f;
+        background: #103245;
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover:enabled {
+        border-color: var(--accent);
+      }
+
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+      }
+
+      .status {
+        margin: 0;
+        min-height: 24px;
+        padding: 0 24px 14px;
+        color: var(--muted);
+      }
+
+      .status[data-kind="ok"] {
+        color: var(--ok);
+      }
+
+      .status[data-kind="error"] {
+        color: var(--error);
+      }
+
+      .output-wrap {
+        border-top: 1px solid var(--panel-border);
+        padding: 18px 0 0;
+      }
+
+      pre {
+        margin: 0;
+        padding: 0 24px 24px;
+        overflow: auto;
+        white-space: pre;
+        line-height: 1.24;
+        font-size: 14px;
+        color: #e3f8ff;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 14px;
+        }
+
+        .toolbar,
+        .header {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .status,
+        pre {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        h1 {
+          font-size: 1.25rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="frame">
+      <header class="header">
+        <h1>Fallout Save Viewer</h1>
+        <p class="sub">
+          Read-only static viewer. Drop a <code>SAVE.DAT</code> to print the classic in-game
+          character sheet text.
+        </p>
+      </header>
+
+      <section class="toolbar" aria-label="upload controls">
+        <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Drop SAVE.DAT here">
+          Drop <code>SAVE.DAT</code> here or click \"Choose File\".
+        </div>
+
+        <div class="actions">
+          <input id="file-input" type="file" hidden />
+          <button id="choose-file" type="button">Choose File</button>
+          <button id="copy-output" type="button" disabled>Copy Text</button>
+          <button id="download-output" type="button" disabled>Download .txt</button>
+          <label class="toggle">
+            <input id="verbose-toggle" type="checkbox" />
+            Verbose kills
+          </label>
+        </div>
+      </section>
+
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <section class="output-wrap" aria-label="rendered output">
+        <pre id="output" tabindex="0"></pre>
+      </section>
+    </main>
+  </body>
+</html>

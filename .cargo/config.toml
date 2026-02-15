@@ -1,0 +1,5 @@
+[alias]
+# Static web app (WASM-only) shortcuts.
+web-check = "check -p fallout-se-web --target wasm32-unknown-unknown"
+web-test = "test -p fallout-se-web"
+web-wasm = "build -p fallout-se-web --release --target wasm32-unknown-unknown"

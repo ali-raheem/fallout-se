@@ -5,6 +5,7 @@ members = [
     "crates/fallout_cli",
     "crates/fallout_tui",
     "crates/fallout_gui",
+    "crates/fallout_web",
 ]
 default-members = ["crates/fallout_core", "crates/fallout_cli"]
 resolver = "2"
