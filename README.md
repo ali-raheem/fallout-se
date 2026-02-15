@@ -2,11 +2,13 @@
 
 `fallout-se` aims to be a modern, cross-platform, and open source save editor for Fallout 1 and 2.
 
+There is a web based view only version [here](https://ali-raheem.github.io/fallout-se/).
+
 I started this project because the most popular save file editor, [Falche](https://www.nma-fallout.com/resources/falche-fallout-1-editor.15/), is Windows-only, closed source, and appears unmaintained.
 
 I also found [Ultimate Fallout 1 & 2 Save File Editor (F12se)](https://github.com/nousrnam/F12se), which is open source but still Windows-focused.
 
-The community editions of Fallout, [fallout1-ce](https://github.com/alexbatalov/fallout1-ce) and [fallout2-ce](https://github.com.alexbatalov/fallout2-ce) which are clean room reimplimentations by Alex Batalov.
+The community editions of Fallout, [fallout1-ce](https://github.com/alexbatalov/fallout1-ce) and [fallout2-ce](https://github.com/alexbatalov/fallout2-ce) which are clean room reimplimentations by Alex Batalov.
 
 This project is still a work in progress. If a save does not parse or dump correctly, please submit the file (or a minimal repro) so support can be improved.
 
