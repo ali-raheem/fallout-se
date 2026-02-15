@@ -748,7 +748,7 @@ fn parse_internal<R: Read + Seek>(
         Ok(traits) => traits,
         Err(_) => {
             r.seek_to(pre_traits_pos)?;
-            if let (Some(c), Some(len)) = (capture.as_deref_mut(), pre_traits_capture_len) {
+            if let (Some(c), Some(len)) = (capture, pre_traits_capture_len) {
                 c.sections.truncate(len);
                 c.blobs.truncate(len);
             }

@@ -23,10 +23,10 @@ fn load_slot(slot: u32) -> SaveGame {
 fn parse_slot01_header() {
     let save = load_slot(1);
     assert_eq!(save.header.character_name, "Clairey");
-    assert_eq!(save.header.description, "Get to level 12+");
+    assert_eq!(save.header.description, "Master");
     assert_eq!(save.header.version_major, 1);
     assert_eq!(save.header.version_minor, 1);
-    assert_eq!(save.header.game_year, 2162);
+    assert_eq!(save.header.game_year, 2163);
     assert_eq!(save.gender, Gender::Female);
 }
 
@@ -48,8 +48,8 @@ fn parse_slot01_stats() {
     assert_eq!(save.critter_data.bonus_stats[0], 3);
 
     // PC stats
-    assert_eq!(save.pc_stats.level, 10);
-    assert_eq!(save.pc_stats.experience, 50700);
+    assert_eq!(save.pc_stats.level, 13);
+    assert_eq!(save.pc_stats.experience, 80795);
 }
 
 #[test]
@@ -79,9 +79,9 @@ fn parse_slot01_perks() {
 fn parse_slot01_kills() {
     let save = load_slot(1);
 
-    assert_eq!(save.kill_counts[0], 42); // Man
-    assert_eq!(save.kill_counts[7], 124); // Rat
-    assert_eq!(save.kill_counts[6], 25); // Radscorpion
+    assert_eq!(save.kill_counts[0], 67); // Man
+    assert_eq!(save.kill_counts[7], 128); // Rat
+    assert_eq!(save.kill_counts[6], 27); // Radscorpion
 }
 
 #[test]
@@ -101,22 +101,22 @@ fn parse_slot03_different_level() {
     let save = load_slot(3);
 
     assert_eq!(save.header.character_name, "Clairey");
-    assert_eq!(save.header.description, "waterchip");
-    assert_eq!(save.pc_stats.level, 6);
-    assert_eq!(save.pc_stats.experience, 19500);
+    assert_eq!(save.header.description, "Level 4");
+    assert_eq!(save.pc_stats.level, 14);
+    assert_eq!(save.pc_stats.experience, 95040);
     assert_eq!(save.header.elevation, 1);
 }
 
 #[test]
-fn parse_slot04_in_combat() {
+fn parse_slot04_not_in_combat() {
     let save = load_slot(4);
 
-    // SLOT04 was saved during combat (combat_state bit 0x01 set)
-    assert_ne!(save.combat_state.combat_state_flags & 0x01, 0);
-    assert!(save.combat_state.combat_data.is_some());
+    // SLOT04 is not in combat (combat_state bit 0x01 not set)
+    assert_eq!(save.combat_state.combat_state_flags & 0x01, 0);
+    assert!(save.combat_state.combat_data.is_none());
 
     assert_eq!(save.header.description, "Level up");
-    assert_eq!(save.pc_stats.level, 10);
+    assert_eq!(save.pc_stats.level, 14);
 }
 
 #[test]

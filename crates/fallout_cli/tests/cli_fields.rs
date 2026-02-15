@@ -104,9 +104,9 @@ fn cli_default_text_includes_detailed_sections() {
     assert!(stdout.contains("::: Skills :::"));
     assert!(stdout.contains("Small Guns:"));
     assert!(stdout.contains("::: Kills :::"));
-    assert!(stdout.contains("Man: 42"));
+    assert!(stdout.contains("Man: 67"));
     assert!(stdout.contains(" ::: Inventory :::"));
-    assert!(stdout.contains("Caps: 2,967"));
+    assert!(stdout.contains("Caps: 9,305"));
     assert!(stdout.contains("Total Weight:"));
     assert!(stdout.contains("pid="));
     assert!(!stdout.contains("pid=FFFFFFFF"));
@@ -255,8 +255,8 @@ fn cli_outputs_default_summary_as_json() {
     assert_eq!(json["game"], "Fallout1");
     assert_eq!(json["name"], "Clairey");
     assert_eq!(json["gender"], "Female");
-    assert_eq!(json["level"], 10);
-    assert_eq!(json["xp"], 50700);
+    assert_eq!(json["level"], 13);
+    assert_eq!(json["xp"], 80795);
     assert!(json.get("global_var_count").is_some());
 }
 

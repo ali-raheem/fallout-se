@@ -14,7 +14,7 @@ const TWO_COL_WIDTH_RIGHT: usize = 44;
 const INVENTORY_COL_WIDTH_A: usize = 25;
 const INVENTORY_COL_WIDTH_B: usize = 25;
 const INVENTORY_COL_WIDTH_C: usize = 23;
-const INVENTORY_CAPS_PID: i32 = -1;
+const INVENTORY_CAPS_PID: i32 = 41;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonStyle {
@@ -754,7 +754,7 @@ fn write_traits_perks_karma_grid(
             })
             .collect()
     };
-    let karma_lines = vec![
+    let karma_lines = [
         format!("Karma: {karma}"),
         format!("Reputation: {reputation}"),
     ];

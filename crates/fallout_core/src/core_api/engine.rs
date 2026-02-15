@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const STAT_AGE_INDEX: usize = 33;
-const INVENTORY_CAPS_PID: i32 = -1;
+const INVENTORY_CAPS_PID: i32 = 41;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;

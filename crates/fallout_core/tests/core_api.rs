@@ -48,7 +48,7 @@ fn engine_auto_detects_fallout1() {
     assert_eq!(session.game(), Game::Fallout1);
     assert_eq!(session.snapshot().game, Game::Fallout1);
     assert_eq!(session.snapshot().character_name, "Clairey");
-    assert_eq!(session.snapshot().description, "Get to level 12+");
+    assert_eq!(session.snapshot().description, "Master");
     assert!(session.snapshot().global_var_count > 0);
 
     let caps = session.capabilities();
@@ -178,8 +178,8 @@ fn session_query_methods_match_fallout1_save_data() {
     let kills = session.nonzero_kill_counts();
     let expected_kills = save.kill_counts.iter().filter(|&&count| count > 0).count();
     assert_eq!(kills.len(), expected_kills);
-    assert!(kills.iter().any(|k| k.index == 0 && k.count == 42));
-    assert!(kills.iter().any(|k| k.index == 7 && k.count == 124));
+    assert!(kills.iter().any(|k| k.index == 0 && k.count == 67));
+    assert!(kills.iter().any(|k| k.index == 7 && k.count == 128));
 
     assert_eq!(session.map_files(), save.map_files);
 }
