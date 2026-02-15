@@ -187,6 +187,56 @@ fn cli_outputs_default_summary_as_json() {
 }
 
 #[test]
+fn cli_outputs_default_json_in_expected_order() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--json", &path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: Value = serde_json::from_str(&stdout).expect("stdout should be valid JSON");
+    let keys: Vec<&str> = json
+        .as_object()
+        .expect("top-level JSON should be an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    assert_eq!(
+        keys,
+        vec![
+            "game",
+            "description",
+            "game_date",
+            "save_date",
+            "game_time",
+            "name",
+            "age",
+            "gender",
+            "level",
+            "xp",
+            "next_level_xp",
+            "skill_points",
+            "map",
+            "map_id",
+            "elevation",
+            "global_var_count",
+            "special",
+            "hp",
+            "max_hp",
+            "derived_stats",
+            "traits",
+            "perks",
+            "karma",
+            "reputation",
+            "skills",
+            "kill_counts",
+            "inventory",
+        ]
+    );
+}
+
+#[test]
 fn cli_set_gender_requires_output_path() {
     let path = fallout1_save_path(1);
     let path = path.to_string_lossy().to_string();

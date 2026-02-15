@@ -313,24 +313,8 @@ mod tests {
 
         // 18 base object fields.
         for v in [
-            1i32,
-            100,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0x20000001, // PID type 2 (scenery)
-            -1,
-            0,
-            0,
-            0,
-            -1,
-            -1,
+            1i32, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x20000001, // PID type 2 (scenery)
+            -1, 0, 0, 0, -1, -1,
         ] {
             bytes.extend_from_slice(&v.to_be_bytes());
         }

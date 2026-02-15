@@ -11,49 +11,81 @@ This project is still a work in progress. If a save does not parse or dump corre
 ## Project Goals
 - Parity with Falche where practical.
 - Solid core library first.
-- TUI and GUI frontends on top of the same core API.
+- TUI/GUI frontends on top of the same core API and shared output renderer.
 
 ## Current Features
 
 ### Working
-- Parse and dump `SAVE.DAT` for Fallout 1 and Fallout 2.
-- Query fields from CLI: `--name`, `--description`, `--gender`, `--age`, `--level`, `--xp`, `--karma`, `--reputation`, `--skill-points`, `--map`, `--game-date`, `--save-date`.
-- JSON output with `--json`.
+- Parse `SAVE.DAT` for Fallout 1 and Fallout 2 with auto-detection.
+- **Game-style character sheet** — default text output matches the Fallout in-game print screen (centered title, 3-column SPECIAL/derived stats, traits/perks sections).
+- **Comprehensive JSON output** with `--json` — includes SPECIAL stats, derived stats, skills, perks, kill counts, inventory, game time, max HP, next level XP.
+- **Query individual fields** — `--name`, `--description`, `--gender`, `--age`, `--level`, `--xp`, `--karma`, `--reputation`, `--skill-points`, `--map`, `--game-date`, `--save-date`, `--hp`, `--max-hp`, `--next-level-xp`, `--game-time`, `--special`, `--derived-stats`, `--skills`, `--perks`, `--kills`, `--inventory`, `--traits`.
 - Safe edits written to a new file via `--output`:
-  - `--set-gender`
-  - `--set-age`
-  - `--set-level`
-  - `--set-xp`
-  - `--set-skill-points`
-  - `--set-karma`
-  - `--set-reputation`
-- Confirmed working in Fallout 1: `--set-gender` and `--set-skill-points` (for example setting skill points to `10`).
+  - `--set-gender`, `--set-age`, `--set-level`, `--set-xp`
+  - `--set-skill-points`, `--set-karma`, `--set-reputation`
+  - `--set-strength`, `--set-perception`, `--set-endurance`, `--set-charisma`, `--set-intelligence`, `--set-agility`, `--set-luck`
+  - `--set-hp`
 
 ### Not Working Yet
 - Advanced edits (inventory, object graph, perks/traits, world state).
 
-## CLI Commands
+## CLI Usage
 
-Read selected fields:
+Default output (game-style character sheet):
+
+```bash
+fallout-se path/to/SAVE.DAT
+```
+
+```
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                        08 January 2162  0822 hours
+
+  Name: Clairey            Age: 25               Gender: Female
+ Level: 04                 Exp: 6,130        Next Level: 10,000
+
+       Strength: 06         Hit Points: 037/041         Sequence: 06
+     Perception: 08        Armor Class: 017         Healing Rate: 01
+      Endurance: 04      Action Points: 09       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 01          Carry Weight: 175 lbs.
+   Intelligence: 09        Damage Res.: 020%
+        Agility: 09     Radiation Res.: 008%
+           Luck: 09        Poison Res.: 020%
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+```
+
+Query selected fields:
 
 ```bash
 fallout-se --gender --level --xp path/to/SAVE.DAT
 ```
 
-Force game detection hint (symmetric flags):
+JSON output (all data):
+
+```bash
+fallout-se --json path/to/SAVE.DAT
+```
+
+Selective JSON:
+
+```bash
+fallout-se --json --special --skills path/to/SAVE.DAT
+```
+
+Force game detection hint:
 
 ```bash
 fallout-se --fallout1 --gender path/to/SAVE.DAT   # alias: --fo1
 fallout-se --fallout2 --gender path/to/SAVE.DAT   # alias: --fo2
 ```
 
-JSON output:
-
-```bash
-fallout-se --json path/to/SAVE.DAT
-```
-
-Edit Fallout 1 (example: change gender and set 10 skill points):
+Edit and write to a new file:
 
 ```bash
 fallout-se --fallout1 \

@@ -2,11 +2,11 @@ use std::io::{self, Read, Seek};
 
 use crate::reader::BigEndianReader;
 
-use crate::object::GameObject;
 use super::types::{
     KILL_TYPE_COUNT, PC_STAT_COUNT, PERK_COUNT, SAVEABLE_STAT_COUNT, SKILL_COUNT,
     TAGGED_SKILL_COUNT,
 };
+use crate::object::GameObject;
 
 const MAX_GLOBAL_VAR_COUNT: usize = 5000;
 const MAX_MAP_FILE_COUNT: i32 = 512;

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/fallout_core",
+    "crates/fallout_render",
     "crates/fallout_cli",
     "crates/fallout_tui",
     "crates/fallout_gui",

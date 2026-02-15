@@ -1,0 +1,15 @@
+[package]
+name = "fallout-se-render"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "Shared JSON and text rendering for Fallout save data"
+
+[lib]
+name = "fallout_render"
+
+[dependencies]
+fallout_core = { package = "fallout-se-core", version = "0.1.1", path = "../fallout_core" }
+serde_json = { version = "1", features = ["preserve_order"] }

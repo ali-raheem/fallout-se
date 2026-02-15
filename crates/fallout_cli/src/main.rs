@@ -3,12 +3,12 @@ use std::path::PathBuf;
 use std::process;
 
 use clap::{Parser, ValueEnum};
-use fallout_core::core_api::{
-    Engine, Game as CoreGame, InventoryEntry, KillCountEntry, PerkEntry, Session, SkillEntry,
-    StatEntry, TraitEntry,
-};
+use fallout_core::core_api::{Engine, Game as CoreGame, Session, TraitEntry};
 use fallout_core::gender::Gender;
-use serde_json::{Map as JsonMap, Value as JsonValue};
+use fallout_render::{
+    FieldSelection as RenderFieldSelection, JsonStyle, render_classic_sheet, render_json_full,
+    render_json_selected,
+};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum GameKind {
@@ -330,131 +330,33 @@ impl FieldSelection {
         out
     }
 
-    fn selected_json(&self, session: &Session) -> JsonMap<String, JsonValue> {
-        let snapshot = session.snapshot();
-        let mut out = JsonMap::new();
-
-        if self.name {
-            out.insert(
-                "name".to_string(),
-                JsonValue::String(snapshot.character_name.clone()),
-            );
+    fn to_renderer(self) -> RenderFieldSelection {
+        RenderFieldSelection {
+            name: self.name,
+            description: self.description,
+            gender: self.gender,
+            age: self.age,
+            level: self.level,
+            xp: self.xp,
+            karma: self.karma,
+            reputation: self.reputation,
+            skill_points: self.skill_points,
+            map_filename: self.map_filename,
+            elevation: self.elevation,
+            game_date: self.game_date,
+            save_date: self.save_date,
+            traits: self.traits,
+            hp: self.hp,
+            max_hp: self.max_hp,
+            next_level_xp: self.next_level_xp,
+            game_time: self.game_time,
+            special: self.special,
+            derived_stats: self.derived_stats,
+            skills: self.skills,
+            perks: self.perks,
+            kills: self.kills,
+            inventory: self.inventory,
         }
-        if self.description {
-            out.insert(
-                "description".to_string(),
-                JsonValue::String(snapshot.description.clone()),
-            );
-        }
-        if self.gender {
-            out.insert(
-                "gender".to_string(),
-                JsonValue::String(snapshot.gender.to_string()),
-            );
-        }
-        if self.age {
-            out.insert("age".to_string(), JsonValue::from(session.age()));
-        }
-        if self.level {
-            out.insert("level".to_string(), JsonValue::from(snapshot.level));
-        }
-        if self.xp {
-            out.insert("xp".to_string(), JsonValue::from(snapshot.experience));
-        }
-        if self.karma {
-            out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
-        }
-        if self.reputation {
-            out.insert(
-                "reputation".to_string(),
-                JsonValue::from(snapshot.reputation),
-            );
-        }
-        if self.skill_points {
-            out.insert(
-                "skill_points".to_string(),
-                JsonValue::from(snapshot.unspent_skill_points),
-            );
-        }
-        if self.map_filename {
-            out.insert(
-                "map".to_string(),
-                JsonValue::String(snapshot.map_filename.clone()),
-            );
-        }
-        if self.elevation {
-            out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
-        }
-        if self.game_date {
-            out.insert(
-                "game_date".to_string(),
-                JsonValue::String(format_date(
-                    snapshot.game_date.year,
-                    snapshot.game_date.month,
-                    snapshot.game_date.day,
-                )),
-            );
-        }
-        if self.save_date {
-            out.insert(
-                "save_date".to_string(),
-                JsonValue::String(format_date(
-                    snapshot.file_date.year,
-                    snapshot.file_date.month,
-                    snapshot.file_date.day,
-                )),
-            );
-        }
-        if self.traits {
-            out.insert(
-                "traits".to_string(),
-                traits_to_json(&session.selected_traits()),
-            );
-        }
-        if self.hp {
-            out.insert(
-                "hp".to_string(),
-                match session.current_hp() {
-                    Some(v) => JsonValue::from(v),
-                    None => JsonValue::Null,
-                },
-            );
-        }
-        if self.max_hp {
-            out.insert("max_hp".to_string(), JsonValue::from(session.max_hp()));
-        }
-        if self.next_level_xp {
-            out.insert(
-                "next_level_xp".to_string(),
-                JsonValue::from(session.next_level_xp()),
-            );
-        }
-        if self.game_time {
-            out.insert(
-                "game_time".to_string(),
-                JsonValue::String(format_game_time(snapshot.game_time)),
-            );
-        }
-        if self.special {
-            out.insert("special".to_string(), special_to_json(session));
-        }
-        if self.derived_stats {
-            out.insert("derived_stats".to_string(), derived_stats_to_json(session));
-        }
-        if self.skills {
-            out.insert("skills".to_string(), skills_to_json(session));
-        }
-        if self.perks {
-            out.insert("perks".to_string(), perks_to_json(session));
-        }
-        if self.kills {
-            out.insert("kill_counts".to_string(), kill_counts_to_json(session));
-        }
-        if self.inventory {
-            out.insert("inventory".to_string(), inventory_to_json(session));
-        }
-
-        out
     }
 }
 
@@ -592,9 +494,9 @@ fn main() {
 
     if cli.json {
         let json = if fields.is_field_mode() {
-            JsonValue::Object(fields.selected_json(&session))
+            render_json_selected(&session, &fields.to_renderer(), JsonStyle::CanonicalV1)
         } else {
-            JsonValue::Object(default_json(&session))
+            render_json_full(&session, JsonStyle::CanonicalV1)
         };
         let rendered = serde_json::to_string_pretty(&json).unwrap_or_else(|e| {
             eprintln!("Error rendering JSON output: {e}");
@@ -617,355 +519,7 @@ fn main() {
         return;
     }
 
-    print_character_sheet(&session);
-}
-
-// ---------------------------------------------------------------------------
-// JSON output
-// ---------------------------------------------------------------------------
-
-fn default_json(session: &Session) -> JsonMap<String, JsonValue> {
-    let snapshot = session.snapshot();
-    let mut out = JsonMap::new();
-
-    out.insert(
-        "game".to_string(),
-        JsonValue::String(match session.game() {
-            CoreGame::Fallout1 => "Fallout1".to_string(),
-            CoreGame::Fallout2 => "Fallout2".to_string(),
-        }),
-    );
-    out.insert(
-        "name".to_string(),
-        JsonValue::String(snapshot.character_name.clone()),
-    );
-    out.insert(
-        "description".to_string(),
-        JsonValue::String(snapshot.description.clone()),
-    );
-    out.insert(
-        "gender".to_string(),
-        JsonValue::String(snapshot.gender.to_string()),
-    );
-    out.insert("age".to_string(), JsonValue::from(session.age()));
-    out.insert("level".to_string(), JsonValue::from(snapshot.level));
-    out.insert("xp".to_string(), JsonValue::from(snapshot.experience));
-    out.insert(
-        "next_level_xp".to_string(),
-        JsonValue::from(session.next_level_xp()),
-    );
-    out.insert(
-        "skill_points".to_string(),
-        JsonValue::from(snapshot.unspent_skill_points),
-    );
-    out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
-    out.insert(
-        "reputation".to_string(),
-        JsonValue::from(snapshot.reputation),
-    );
-    out.insert(
-        "hp".to_string(),
-        match session.current_hp() {
-            Some(v) => JsonValue::from(v),
-            None => JsonValue::Null,
-        },
-    );
-    out.insert("max_hp".to_string(), JsonValue::from(session.max_hp()));
-    out.insert(
-        "game_date".to_string(),
-        JsonValue::String(format_date(
-            snapshot.game_date.year,
-            snapshot.game_date.month,
-            snapshot.game_date.day,
-        )),
-    );
-    out.insert(
-        "game_time".to_string(),
-        JsonValue::String(format_game_time(snapshot.game_time)),
-    );
-    out.insert(
-        "save_date".to_string(),
-        JsonValue::String(format_date(
-            snapshot.file_date.year,
-            snapshot.file_date.month,
-            snapshot.file_date.day,
-        )),
-    );
-    out.insert(
-        "map".to_string(),
-        JsonValue::String(snapshot.map_filename.clone()),
-    );
-    out.insert("map_id".to_string(), JsonValue::from(snapshot.map_id));
-    out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
-    out.insert(
-        "global_var_count".to_string(),
-        JsonValue::from(snapshot.global_var_count),
-    );
-    out.insert("special".to_string(), special_to_json(session));
-    out.insert("derived_stats".to_string(), derived_stats_to_json(session));
-    out.insert(
-        "traits".to_string(),
-        traits_to_json(&session.selected_traits()),
-    );
-    out.insert("skills".to_string(), skills_to_json(session));
-    out.insert("perks".to_string(), perks_to_json(session));
-    out.insert("kill_counts".to_string(), kill_counts_to_json(session));
-    out.insert("inventory".to_string(), inventory_to_json(session));
-
-    out
-}
-
-fn special_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .special_stats()
-            .iter()
-            .map(stat_entry_to_json)
-            .collect(),
-    )
-}
-
-fn derived_stats_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .all_derived_stats()
-            .iter()
-            .map(stat_entry_to_json)
-            .collect(),
-    )
-}
-
-fn stat_entry_to_json(s: &StatEntry) -> JsonValue {
-    let mut m = JsonMap::new();
-    m.insert("name".to_string(), JsonValue::String(s.name.clone()));
-    m.insert("base".to_string(), JsonValue::from(s.base));
-    m.insert("bonus".to_string(), JsonValue::from(s.bonus));
-    m.insert("total".to_string(), JsonValue::from(s.total));
-    JsonValue::Object(m)
-}
-
-fn skills_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .skills()
-            .iter()
-            .map(|s: &SkillEntry| {
-                let mut m = JsonMap::new();
-                m.insert("name".to_string(), JsonValue::String(s.name.clone()));
-                m.insert("value".to_string(), JsonValue::from(s.value));
-                m.insert("tagged".to_string(), JsonValue::Bool(s.tagged));
-                JsonValue::Object(m)
-            })
-            .collect(),
-    )
-}
-
-fn perks_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .active_perks()
-            .iter()
-            .map(|p: &PerkEntry| {
-                let mut m = JsonMap::new();
-                m.insert("name".to_string(), JsonValue::String(p.name.clone()));
-                m.insert("rank".to_string(), JsonValue::from(p.rank));
-                JsonValue::Object(m)
-            })
-            .collect(),
-    )
-}
-
-fn kill_counts_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .nonzero_kill_counts()
-            .iter()
-            .map(|k: &KillCountEntry| {
-                let mut m = JsonMap::new();
-                m.insert("name".to_string(), JsonValue::String(k.name.clone()));
-                m.insert("count".to_string(), JsonValue::from(k.count));
-                JsonValue::Object(m)
-            })
-            .collect(),
-    )
-}
-
-fn inventory_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .inventory()
-            .iter()
-            .map(|item: &InventoryEntry| {
-                let mut m = JsonMap::new();
-                m.insert("quantity".to_string(), JsonValue::from(item.quantity));
-                m.insert("pid".to_string(), JsonValue::from(item.pid));
-                JsonValue::Object(m)
-            })
-            .collect(),
-    )
-}
-
-fn traits_to_json(traits: &[TraitEntry]) -> JsonValue {
-    JsonValue::Array(
-        traits
-            .iter()
-            .map(|t| JsonValue::String(t.name.clone()))
-            .collect(),
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Game-style text output
-// ---------------------------------------------------------------------------
-
-fn print_character_sheet(session: &Session) {
-    let snapshot = session.snapshot();
-
-    // Title block (centered on 76-char field)
-    let title = match session.game() {
-        CoreGame::Fallout1 => "FALLOUT",
-        CoreGame::Fallout2 => "FALLOUT II",
-    };
-    let subtitle = match session.game() {
-        CoreGame::Fallout1 => "VAULT-13 PERSONNEL RECORD",
-        CoreGame::Fallout2 => "PERSONNEL RECORD",
-    };
-    let date_time_str = format!(
-        "{:02} {} {}  {} hours",
-        snapshot.game_date.day,
-        month_to_name(snapshot.game_date.month),
-        snapshot.game_date.year,
-        format_game_time(snapshot.game_time),
-    );
-
-    println!();
-    println!();
-    println!("{:^76}", title);
-    println!("{:^76}", subtitle);
-    println!("{:^76}", date_time_str);
-    println!();
-
-    // Name / Age / Gender
-    let name_section = format!("  Name: {:<19}", snapshot.character_name);
-    let age_section = format!("Age: {:<17}", session.age());
-    println!("{}{}Gender: {}", name_section, age_section, snapshot.gender);
-
-    // Level / Exp / Next Level
-    let level_section = format!(" Level: {:02}", snapshot.level);
-    let xp_str = format_number_with_commas(snapshot.experience);
-    let next_xp_str = format_number_with_commas(session.next_level_xp());
-    let exp_section = format!("Exp: {:<13}", xp_str);
-    println!(
-        "{:<27}{}Next Level: {}",
-        level_section, exp_section, next_xp_str
-    );
-    println!();
-
-    // SPECIAL + Derived stats (7 rows, 3 columns)
-    let special_names = ["Strength", "Perception", "Endurance", "Charisma",
-                         "Intelligence", "Agility", "Luck"];
-    // Middle column: stat index, display label, format function
-    struct MiddleCol { idx: usize, label: &'static str }
-    let middle_cols = [
-        MiddleCol { idx: 7,  label: "Hit Points" },
-        MiddleCol { idx: 9,  label: "Armor Class" },
-        MiddleCol { idx: 8,  label: "Action Points" },
-        MiddleCol { idx: 11, label: "Melee Damage" },
-        MiddleCol { idx: 24, label: "Damage Res." },
-        MiddleCol { idx: 31, label: "Radiation Res." },
-        MiddleCol { idx: 32, label: "Poison Res." },
-    ];
-    struct RightCol { idx: usize, label: &'static str }
-    let right_cols: [Option<RightCol>; 7] = [
-        Some(RightCol { idx: 13, label: "Sequence" }),
-        Some(RightCol { idx: 14, label: "Healing Rate" }),
-        Some(RightCol { idx: 15, label: "Critical Chance" }),
-        Some(RightCol { idx: 12, label: "Carry Weight" }),
-        None,
-        None,
-        None,
-    ];
-
-    let current_hp = session.current_hp().unwrap_or(0);
-    let max_hp = session.max_hp();
-
-    for row in 0..7 {
-        let special_val = session.stat(row).total;
-
-        // Left column: SPECIAL name right-aligned, colon at pos 15, 2-digit value
-        let mut line = String::with_capacity(80);
-        let left_pad = 15 - special_names[row].len();
-        for _ in 0..left_pad {
-            line.push(' ');
-        }
-        line.push_str(special_names[row]);
-        line.push_str(": ");
-        line.push_str(&format!("{:02}", special_val));
-
-        // Middle column: label right-aligned, colon at pos 38
-        let mid = &middle_cols[row];
-        let mid_val = match row {
-            0 => format!("{:03}/{:03}", current_hp, max_hp),   // Hit Points
-            1 => format!("{:03}", session.stat(mid.idx).total), // Armor Class
-            2 => format!("{:02}", session.stat(mid.idx).total), // Action Points
-            3 => format!("{:02}", session.stat(mid.idx).total), // Melee Damage
-            4 => format!("{:03}%", session.stat(mid.idx).total), // Damage Res.
-            5 => format!("{:03}%", session.stat(mid.idx).total), // Radiation Res.
-            6 => format!("{:03}%", session.stat(mid.idx).total), // Poison Res.
-            _ => unreachable!(),
-        };
-        let mid_start = 38 - mid.label.len();
-        while line.len() < mid_start {
-            line.push(' ');
-        }
-        line.push_str(mid.label);
-        line.push_str(": ");
-        line.push_str(&mid_val);
-
-        // Right column (rows 0-3 only)
-        if let Some(ref right) = right_cols[row] {
-            let right_val = match row {
-                0 => format!("{:02}", session.stat(right.idx).total), // Sequence
-                1 => format!("{:02}", session.stat(right.idx).total), // Healing Rate
-                2 => format!("{:03}%", session.stat(right.idx).total), // Critical Chance
-                3 => format!("{} lbs.", session.stat(right.idx).total), // Carry Weight
-                _ => unreachable!(),
-            };
-            let right_start = 64 - right.label.len();
-            while line.len() < right_start {
-                line.push(' ');
-            }
-            line.push_str(right.label);
-            line.push_str(": ");
-            line.push_str(&right_val);
-        }
-
-        println!("{}", line);
-    }
-    println!();
-    println!();
-
-    // Traits / Perks / Karma section
-    let traits = session.selected_traits();
-    let perks = session.active_perks();
-
-    println!(" ::: Traits :::           ::: Perks :::           ::: Karma :::");
-    for t in &traits {
-        println!("  {}", t.name);
-    }
-
-    // Skills/Kills header (shown when perks exist)
-    if !perks.is_empty() {
-        println!(" ::: Skills :::                ::: Kills :::");
-        for p in &perks {
-            if p.rank > 1 {
-                println!("  {} ({})", p.name, p.rank);
-            } else {
-                println!("  {}", p.name);
-            }
-        }
-    }
-    println!();
+    print!("{}", render_classic_sheet(&session));
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,37 +569,4 @@ fn format_game_time(game_time: u32) -> String {
     let hours = (game_time / 600) % 24;
     let minutes = (game_time / 10) % 60;
     format!("{:02}{:02}", hours, minutes)
-}
-
-fn format_number_with_commas(n: i32) -> String {
-    if n < 0 {
-        return format!("-{}", format_number_with_commas(-n));
-    }
-    let s = n.to_string();
-    let mut result = String::with_capacity(s.len() + s.len() / 3);
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i).is_multiple_of(3) {
-            result.push(',');
-        }
-        result.push(c);
-    }
-    result
-}
-
-fn month_to_name(month: i16) -> &'static str {
-    match month {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "Unknown",
-    }
 }

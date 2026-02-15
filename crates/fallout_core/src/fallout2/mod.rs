@@ -7,9 +7,9 @@ use std::io::{self, Cursor, Read, Seek};
 
 use crate::gender::Gender;
 use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
+use crate::object::GameObject;
 use crate::reader::BigEndianReader;
 use header::SaveHeader;
-use crate::object::GameObject;
 use sections::{
     CombatState, CritterProtoData, PcStats, parse_critter_proto_nearby, parse_game_global_vars,
     parse_kill_counts, parse_map_file_list, parse_player_combat_id, parse_player_object,
