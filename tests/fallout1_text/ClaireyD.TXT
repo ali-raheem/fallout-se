@@ -1,0 +1,54 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                        18 January 2163  2006 hours
+
+  Name: Clairey            Age: 26               Gender: Female
+ Level: 13                 Exp: 79,235       Next Level: 91,000
+
+       Strength: 09         Hit Points: 076/077         Sequence: 09
+     Perception: 08        Armor Class: 034         Healing Rate: 01
+      Endurance: 04      Action Points: 10       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 04          Carry Weight: 600 lbs.
+   Intelligence: 09        Damage Res.: 050%
+        Agility: 09     Radiation Res.: 038%
+           Luck: 09        Poison Res.: 020%
+
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+  Bonus Move (2)
+  Bonus Ranged Damage (2)
+  Bonus Rate of Fire
+  More Criticals (2)
+  Action Boy
+
+ ::: Inventory :::
+
+                                      Total Weight:
+
+
+Error
+  104x Stimpak             1x Lock Picks            9,305x Bottle Caps     
+  12x First Aid Kit        3x Doctor's Bag          11x Mentats            
+  2x First Aid Kit         11x Grenade (Frag)       1x You Have No Idea    
+  1x Alien Blaster         9x Buffout               8x Psycho              
+  5x Rad-X                 10x Grenade (Plasma)     1x Yellow Pass Key     
+  12x RadAway              2x Stealth Boy           1x Blue Pass Key       
+  1x Red Pass Key          18x Super Stimpak        1x Rope                
+  1x Radio                 1x Flower                1x Laser Pistol        
+  1x Plasma Pistol         19x Small Energy Cell    19x Micro Fusion Cell  
+  15x .223 FMJ             4x Booze                 1x Sniper Rifle        
+  3x Grenade (Pulse)       3x Flamethrower Fuel     1x Laser Rifle         
+  3x Plastic Explosives    1x Gatling Laser         2x Dynamite            
+  1x Geiger Counter        1x Electronic Lock Pick  1x Tape                
+  1x Key                   1x Tool                  1x Turbo Plasma Rifle  
+  1x Hardened Power Armor
+
+Error 555 lbs.
+
+

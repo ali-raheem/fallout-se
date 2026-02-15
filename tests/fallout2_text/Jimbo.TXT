@@ -1,0 +1,57 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                          25 July 2241  0824 hours
+
+  Name: Jimbo              Age: 19               Gender: Female
+ Level: 01                 Exp: 0            Next Level: 1,000
+
+ ::: Statistics :::
+       Strength: 04         Hit Points: 027/027         Sequence: 10
+     Perception: 05        Armor Class: 006         Healing Rate: 01
+      Endurance: 04      Action Points: 08       Critical Chance: 004%
+       Charisma: 10       Melee Damage: 01          Carry Weight: 125 lbs.
+   Intelligence: 07        Damage Res.: 000%
+        Agility: 06     Radiation Res.: 008%
+           Luck: 04        Poison Res.: 020%
+
+
+ ::: Traits :::
+  One Hander
+  Sex Appeal
+
+ ::: Karma :::
+  Karma: 0 (Wanderer)
+  Virgin of the Wastes
+
+ ::: Reputation :::
+  Arroyo: Idolized
+
+ ::: Skills :::                ::: Kills :::
+  Small Guns ..... 029%
+  Big Guns ....... 012%
+  Energy Weapons . 012%
+  Unarmed ........ 050%
+  Melee Weapons .. 040%
+  Throwing ....... 024%
+  First Aid ...... 044%
+  Doctor ......... 017%
+  Sneak .......... 023%
+  Lockpick ....... 021%
+  Steal .......... 018%
+  Traps .......... 021%
+  Science ........ 028%
+  Repair ......... 021%
+  Speech ......... 070%
+  Barter ......... 060%
+  Gambling ....... 020%
+  Outdoorsman .... 022%
+
+
+ ::: Inventory :::
+  1x Spear               
+
+                                      Total Weight: 4 lbs.
+
+

@@ -1,0 +1,50 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                        01 January 2163  1019 hours
+
+  Name: Clairey            Age: 26               Gender: Female
+ Level: 11                 Exp: 55,745       Next Level: 66,000
+
+       Strength: 09         Hit Points: 065/069         Sequence: 09
+     Perception: 08        Armor Class: 034         Healing Rate: 01
+      Endurance: 04      Action Points: 09       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 04          Carry Weight: 600 lbs.
+   Intelligence: 09        Damage Res.: 040%
+        Agility: 09     Radiation Res.: 038%
+           Luck: 09        Poison Res.: 020%
+
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+  Bonus Move (2)
+  Bonus Ranged Damage (2)
+  Bonus Rate of Fire
+  More Criticals (2)
+
+ ::: Inventory :::
+
+                                      Total Weight:
+
+
+Error
+  74x Stimpak              1x Lock Picks            16,206x Bottle Caps    
+  10x First Aid Kit        2x Doctor's Bag          11x Mentats            
+  2x First Aid Kit         2x Grenade (Frag)        1x You Have No Idea    
+  1x Alien Blaster         6x Buffout               6x Psycho              
+  3x Rad-X                 3x Grenade (Plasma)      1x Yellow Pass Key     
+  5x RadAway               2x Stealth Boy           1x Blue Pass Key       
+  1x Red Pass Key          14x Super Stimpak        1x Rope                
+  1x Tool                  1x Radio                 1x Flower              
+  1x Laser Pistol          1x Plasma Pistol         6x Small Energy Cell   
+  9x Micro Fusion Cell     12x .223 FMJ             1x Laser Rifle         
+  1x Junk                  3x Booze                 1x Sniper Rifle        
+  1x Plasma Rifle          1x Powered Armor       
+
+Error 331 lbs.
+
+

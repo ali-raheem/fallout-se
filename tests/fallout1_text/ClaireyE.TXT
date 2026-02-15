@@ -1,0 +1,55 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                        10 February 2163  1436 hours
+
+  Name: Clairey            Age: 26               Gender: Female
+ Level: 14                 Exp: 91,095       Next Level: 105,000
+
+       Strength: 09         Hit Points: 077/081         Sequence: 09
+     Perception: 08        Armor Class: 034         Healing Rate: 01
+      Endurance: 04      Action Points: 10       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 04          Carry Weight: 600 lbs.
+   Intelligence: 09        Damage Res.: 050%
+        Agility: 09     Radiation Res.: 038%
+           Luck: 09        Poison Res.: 020%
+
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+  Bonus Move (2)
+  Bonus Ranged Damage (2)
+  Bonus Rate of Fire
+  More Criticals (2)
+  Action Boy
+
+ ::: Inventory :::
+
+                                      Total Weight:
+
+
+Error
+  104x Stimpak             1x Lock Picks            9,515x Bottle Caps     
+  13x First Aid Kit        3x Doctor's Bag          11x Mentats            
+  2x First Aid Kit         12x Grenade (Frag)       1x You Have No Idea    
+  1x Alien Blaster         9x Buffout               8x Psycho              
+  5x Rad-X                 10x Grenade (Plasma)     1x Yellow Pass Key     
+  12x RadAway              2x Stealth Boy           1x Blue Pass Key       
+  1x Red Pass Key          19x Super Stimpak        1x Rope                
+  1x Radio                 1x Flower                1x Laser Pistol        
+  1x Plasma Pistol         21x Small Energy Cell    17x Micro Fusion Cell  
+  17x .223 FMJ             1x Sniper Rifle          3x Grenade (Pulse)     
+  1x Laser Rifle           3x Plastic Explosives    2x Dynamite            
+  1x Tape                  1x Tool                  1x Electronic Lock Pick
+  1x COC Badge             2x Robes                 1x Tesla Armor         
+  1x Power Fist            1x Key                   11x Flower             
+  2x COC Badge             1x Gatling Laser         1x Turbo Plasma Rifle  
+  1x Hardened Power Armor
+
+Error 600 lbs.
+
+
