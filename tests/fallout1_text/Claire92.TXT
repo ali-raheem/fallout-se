@@ -1,0 +1,55 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                       22 September 2162  1541 hours
+
+  Name: Clairey            Age: 25               Gender: Female
+ Level: 09                 Exp: 43,440       Next Level: 45,000
+
+       Strength: 06         Hit Points: 061/061         Sequence: 06
+     Perception: 08        Armor Class: 029         Healing Rate: 01
+      Endurance: 04      Action Points: 09       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 01          Carry Weight: 525 lbs.
+   Intelligence: 09        Damage Res.: 040%
+        Agility: 09     Radiation Res.: 028%
+           Luck: 09        Poison Res.: 020%
+
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+  Bonus Move
+  Bonus Rate of Fire
+  More Criticals
+
+ ::: Inventory :::
+
+                                      Total Weight:
+
+
+Error
+  78x Stimpak              1x Lock Picks            15,896x Bottle Caps    
+  9x First Aid Kit         11x .223 FMJ             3x Dynamite            
+  2x Doctor's Bag          9x Mentats               2x First Aid Kit       
+  9x Grenade (Frag)        1x You Have No Idea      1x Alien Blaster       
+  5x Buffout               6x Small Energy Cell     5x Psycho              
+  3x Rad-X                 1x Plastic Explosives    6x Grenade (Plasma)    
+  1x Yellow Pass Key       1x Rocket Launcher       4x RadAway             
+  8x 5mm AP                6x Rocket AP             1x Plasma Pistol       
+  4x Grenade (Pulse)       1x Minigun               1x Radio               
+  8x Micro Fusion Cell     1x Stealth Boy           1x Laser Pistol        
+  1x Plasma Rifle          1x Combat Armor          1x Blue Pass Key       
+  1x Red Pass Key          3x Tool                  1x Motion Sensor       
+  1x Geiger Counter        5x 5mm JHP               3x Explosive Rocket    
+  12x Super Stimpak        5x Rope                  1x Flamethrower Fuel   
+  5x 10mm AP               1x 10mm SMG              1x Back Pack           
+  1x Bag                   2x 10mm JHP              1x Geiger Counter      
+  2x Laser Rifle           1x Laser Rifle           1x Tape                
+  1x Sniper Rifle          1x Brotherhood Armor   
+
+Error 507 lbs.
+
+

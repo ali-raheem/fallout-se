@@ -1,0 +1,57 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                          25 June 2162  1842 hours
+
+  Name: Clairey            Age: 25               Gender: Female
+ Level: 09                 Exp: 37,850       Next Level: 45,000
+
+       Strength: 06         Hit Points: 061/061         Sequence: 06
+     Perception: 08        Armor Class: 019         Healing Rate: 01
+      Endurance: 04      Action Points: 09       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 01          Carry Weight: 525 lbs.
+   Intelligence: 09        Damage Res.: 030%
+        Agility: 09     Radiation Res.: 008%
+           Luck: 09        Poison Res.: 020%
+
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+  Bonus Move
+  Bonus Rate of Fire
+
+ ::: Inventory :::
+
+                                      Total Weight:
+
+
+Error
+  43x Stimpak              1x Lock Picks            7x 10mm AP             
+  13,156x Bottle Caps      8x First Aid Kit         9x .223 FMJ            
+  3x Dynamite              1x Doctor's Bag          6x Mentats             
+  1x First Aid Kit         8x Grenade (Frag)        1x You Have No Idea    
+  1x Alien Blaster         5x Buffout               1x Motion Sensor       
+  6x Small Energy Cell     1x Psycho                2x Rad-X               
+  1x Motion Sensor         4x 14mm AP               1x Plastic Explosives  
+  3x Grenade (Plasma)      1x Yellow Pass Key       1x Rocket Launcher     
+  1x RadAway               1x Tool                  6x 5mm AP              
+  3x Assault Rifle         4x Rocket AP             1x Crowbar             
+  5x 5mm JHP               2x .44 Magnum JHP        2x 10mm Pistol         
+  1x Sniper Rifle          1x Plasma Pistol         1x Sniper Rifle        
+  1x Sniper Rifle          1x 12 ga. Shotgun Shells  1x Shotgun             
+  1x Grenade (Pulse)       1x Delta Experiment Disk  1x Alpha Experiment Disk
+  1x Minigun               1x Radio                 3x Micro Fusion Cell   
+  1x Motion Sensor         1x Geiger Counter        1x Stealth Boy         
+  1x Laser Pistol          1x 14mm Pistol           1x Plasma Rifle        
+  1x Combat Armor          1x FEV Disk              1x Blue Pass Key       
+  1x Red Pass Key          1x Leather Armor         1x Knife               
+  1x 10mm Pistol           1x Geiger Counter        1x 10mm SMG            
+  1x Metal Armor         
+
+Error 425 lbs.
+
+

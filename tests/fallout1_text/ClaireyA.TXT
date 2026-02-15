@@ -1,0 +1,51 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                        06 November 2162  1238 hours
+
+  Name: Clairey            Age: 25               Gender: Female
+ Level: 10                 Exp: 48,475       Next Level: 55,000
+
+       Strength: 09         Hit Points: 062/065         Sequence: 09
+     Perception: 08        Armor Class: 034         Healing Rate: 01
+      Endurance: 04      Action Points: 09       Critical Chance: 019%
+       Charisma: 02       Melee Damage: 04          Carry Weight: 600 lbs.
+   Intelligence: 09        Damage Res.: 040%
+        Agility: 09     Radiation Res.: 038%
+           Luck: 09        Poison Res.: 020%
+
+
+ ::: Traits :::           ::: Perks :::           ::: Karma :::
+  Gifted
+  Finesse
+ ::: Skills :::                ::: Kills :::
+  Awareness
+  Bonus Move (2)
+  Bonus Ranged Damage (2)
+  Bonus Rate of Fire
+  More Criticals (2)
+
+ ::: Inventory :::
+
+                                      Total Weight:
+
+
+Error
+  74x Stimpak              1x Lock Picks            15,956x Bottle Caps    
+  10x First Aid Kit        10x .223 FMJ             3x Dynamite            
+  2x Doctor's Bag          9x Mentats               2x First Aid Kit       
+  3x Grenade (Frag)        1x You Have No Idea      1x Alien Blaster       
+  5x Buffout               5x Psycho                3x Rad-X               
+  3x Grenade (Plasma)      1x Yellow Pass Key       5x RadAway             
+  9x 5mm AP                5x Rocket AP             2x Stealth Boy         
+  1x Blue Pass Key         1x Red Pass Key          5x 5mm JHP             
+  12x Super Stimpak        1x Rope                  5x 10mm AP             
+  1x 10mm SMG              1x Radio                 1x .223 Pistol         
+  1x Rocket Launcher       1x Brotherhood Armor     1x Minigun             
+  1x Explosive Rocket      2x Flower                1x Sniper Rifle        
+  1x Powered Armor         1x 10mm JHP            
+
+Error 340 lbs.
+
+
