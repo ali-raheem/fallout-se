@@ -32,6 +32,13 @@ pub struct Snapshot {
     pub global_var_count: usize,
     pub selected_traits: [i32; 2],
     pub hp: Option<i32>,
+    pub game_time: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InventoryEntry {
+    pub quantity: i32,
+    pub pid: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

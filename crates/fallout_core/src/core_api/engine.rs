@@ -8,8 +8,8 @@ use crate::gender::Gender;
 
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
-    Capabilities, CapabilityIssue, DateParts, Game, KillCountEntry, PerkEntry, SkillEntry,
-    Snapshot, StatEntry, TraitEntry,
+    Capabilities, CapabilityIssue, DateParts, Game, InventoryEntry, KillCountEntry, PerkEntry,
+    SkillEntry, Snapshot, StatEntry, TraitEntry,
 };
 
 const STAT_AGE_INDEX: usize = 33;
@@ -278,6 +278,75 @@ impl Session {
         }
     }
 
+    pub fn max_hp(&self) -> i32 {
+        self.stat(7).total
+    }
+
+    pub fn next_level_xp(&self) -> i32 {
+        let l = self.snapshot.level;
+        (l + 1) * l / 2 * 1000
+    }
+
+    pub fn stat(&self, index: usize) -> StatEntry {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => {
+                let base = doc.save.critter_data.base_stats[index];
+                let bonus = doc.save.critter_data.bonus_stats[index];
+                StatEntry {
+                    index,
+                    name: f1_types::STAT_NAMES[index].to_string(),
+                    base,
+                    bonus,
+                    total: base + bonus,
+                }
+            }
+            LoadedDocument::Fallout2(doc) => {
+                let base = doc.save.critter_data.base_stats[index];
+                let bonus = doc.save.critter_data.bonus_stats[index];
+                StatEntry {
+                    index,
+                    name: f2_types::STAT_NAMES[index].to_string(),
+                    base,
+                    bonus,
+                    total: base + bonus,
+                }
+            }
+        }
+    }
+
+    pub fn all_derived_stats(&self) -> Vec<StatEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => collect_stat_entries(
+                &f1_types::STAT_NAMES,
+                &doc.save.critter_data.base_stats,
+                &doc.save.critter_data.bonus_stats,
+                7..f1_types::STAT_NAMES.len(),
+                false,
+            ),
+            LoadedDocument::Fallout2(doc) => collect_stat_entries(
+                &f2_types::STAT_NAMES,
+                &doc.save.critter_data.base_stats,
+                &doc.save.critter_data.bonus_stats,
+                7..f2_types::STAT_NAMES.len(),
+                false,
+            ),
+        }
+    }
+
+    pub fn inventory(&self) -> Vec<InventoryEntry> {
+        let items = match &self.document {
+            LoadedDocument::Fallout1(doc) => &doc.save.player_object.inventory,
+            LoadedDocument::Fallout2(doc) => &doc.save.player_object.inventory,
+        };
+        items
+            .iter()
+            .map(|item| InventoryEntry {
+                quantity: item.quantity,
+                pid: item.object.pid,
+            })
+            .collect()
+    }
+
     pub fn to_bytes_unmodified(&self) -> Result<Vec<u8>, CoreError> {
         match &self.document {
             LoadedDocument::Fallout1(doc) => doc.to_bytes_unmodified(),
@@ -493,6 +562,7 @@ fn session_from_fallout1(doc: fallout1::Document) -> Session {
         global_var_count: save.global_var_count,
         selected_traits: save.selected_traits,
         hp: extract_hp(&save.player_object),
+        game_time: save.header.game_time,
     };
 
     Session {
@@ -536,6 +606,7 @@ fn session_from_fallout2(doc: fallout2::Document) -> Session {
         global_var_count: save.global_var_count,
         selected_traits: save.selected_traits,
         hp: extract_hp(&save.player_object),
+        game_time: save.header.game_time,
     };
 
     Session {

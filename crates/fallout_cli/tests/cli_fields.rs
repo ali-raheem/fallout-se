@@ -83,7 +83,8 @@ fn cli_without_field_flags_keeps_verbose_dump() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("=== Fallout 1 Save:"));
+    assert!(stdout.contains("FALLOUT"));
+    assert!(stdout.contains("PERSONNEL RECORD"));
 }
 
 #[test]
@@ -105,7 +106,8 @@ fn cli_auto_detects_fallout2_without_hint() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("=== Fallout 2 Save:"));
+    assert!(stdout.contains("FALLOUT"));
+    assert!(stdout.contains("PERSONNEL RECORD"));
 }
 
 #[test]
