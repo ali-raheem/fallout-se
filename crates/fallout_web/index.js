@@ -1,6 +1,9 @@
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
+const WASM_BUNDLE_BASENAME = "fallout-se-web";
 
 let wasmBindings = null;
+let wasmInitInProgress = false;
+let wasmInitTimer = null;
 
 const elements = {
   dropZone: document.getElementById("drop-zone"),
@@ -100,6 +103,46 @@ async function renderFile(file) {
   } catch (error) {
     resetOutput();
     setStatus(extractErrorMessage(error), "error");
+  }
+}
+
+function baseHref() {
+  const base = document.querySelector("base");
+  if (base && typeof base.href === "string" && base.href.length > 0) {
+    return base.href;
+  }
+  return document.baseURI;
+}
+
+async function initWasmFallback() {
+  if (wasmInitInProgress || state.ready || state.initError) {
+    return;
+  }
+
+  wasmInitInProgress = true;
+  const base = baseHref();
+  const jsUrl = new URL(`${WASM_BUNDLE_BASENAME}.js`, base).toString();
+  const wasmUrl = new URL(`${WASM_BUNDLE_BASENAME}_bg.wasm`, base).toString();
+
+  try {
+    const mod = await import(jsUrl);
+    if (typeof mod.default !== "function") {
+      throw new Error(`WASM bundle missing default init(): ${jsUrl}`);
+    }
+    await mod.default({ module_or_path: wasmUrl });
+    wasmBindings = mod;
+    state.ready = true;
+    setStatus("Drop a SAVE.DAT file to render.", "info");
+  } catch (error) {
+    const message = extractErrorMessage(error);
+    state.initError = message;
+    console.error("WASM fallback init failed", { jsUrl, wasmUrl, error });
+    setStatus(
+      `Failed to initialize WASM module (fallback). ${message}`,
+      "error",
+    );
+  } finally {
+    wasmInitInProgress = false;
   }
 }
 
@@ -222,6 +265,13 @@ async function main() {
     },
     { once: true },
   );
+
+  // If Trunk's bootstrap fails silently or never dispatches, try a direct load.
+  wasmInitTimer = window.setTimeout(() => {
+    if (!state.ready && !state.initError) {
+      void initWasmFallback();
+    }
+  }, 2000);
 }
 
 void main();
