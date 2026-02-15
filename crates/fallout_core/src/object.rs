@@ -65,6 +65,7 @@ pub struct CritterObjectData {
 pub struct ItemObjectData {
     pub flags: i32,
     pub extra_bytes: u8, // 0, 4, or 8
+    pub extra_data: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -183,6 +184,90 @@ impl GameObject {
             inventory,
         })
     }
+
+    pub fn emit_to_vec(&self, out: &mut Vec<u8>) -> io::Result<()> {
+        out.extend_from_slice(&self.id.to_be_bytes());
+        out.extend_from_slice(&self.tile.to_be_bytes());
+        out.extend_from_slice(&self.x.to_be_bytes());
+        out.extend_from_slice(&self.y.to_be_bytes());
+        out.extend_from_slice(&self.sx.to_be_bytes());
+        out.extend_from_slice(&self.sy.to_be_bytes());
+        out.extend_from_slice(&self.frame.to_be_bytes());
+        out.extend_from_slice(&self.rotation.to_be_bytes());
+        out.extend_from_slice(&self.fid.to_be_bytes());
+        out.extend_from_slice(&self.flags.to_be_bytes());
+        out.extend_from_slice(&self.elevation.to_be_bytes());
+        out.extend_from_slice(&self.pid.to_be_bytes());
+        out.extend_from_slice(&self.cid.to_be_bytes());
+        out.extend_from_slice(&self.light_distance.to_be_bytes());
+        out.extend_from_slice(&self.light_intensity.to_be_bytes());
+        out.extend_from_slice(&self.outline.to_be_bytes());
+        out.extend_from_slice(&self.sid.to_be_bytes());
+        out.extend_from_slice(&self.script_index.to_be_bytes());
+
+        let inventory_length = if self.inventory_length < 0 && self.inventory.is_empty() {
+            -1
+        } else {
+            self.inventory.len() as i32
+        };
+        let inventory_capacity = self.inventory_capacity.max(inventory_length.max(0));
+        out.extend_from_slice(&inventory_length.to_be_bytes());
+        out.extend_from_slice(&inventory_capacity.to_be_bytes());
+        out.extend_from_slice(&0i32.to_be_bytes());
+
+        match &self.object_data {
+            ObjectData::Critter(data) => {
+                out.extend_from_slice(&data.field_0.to_be_bytes());
+                out.extend_from_slice(&data.damage_last_turn.to_be_bytes());
+                out.extend_from_slice(&data.maneuver.to_be_bytes());
+                out.extend_from_slice(&data.ap.to_be_bytes());
+                out.extend_from_slice(&data.results.to_be_bytes());
+                out.extend_from_slice(&data.ai_packet.to_be_bytes());
+                out.extend_from_slice(&data.team.to_be_bytes());
+                out.extend_from_slice(&data.who_hit_me_cid.to_be_bytes());
+                out.extend_from_slice(&data.hp.to_be_bytes());
+                out.extend_from_slice(&data.radiation.to_be_bytes());
+                out.extend_from_slice(&data.poison.to_be_bytes());
+            }
+            ObjectData::Item(data) => {
+                if data.extra_data.len() != data.extra_bytes as usize {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "item extra data length mismatch: extra_bytes={}, extra_data={}",
+                            data.extra_bytes,
+                            data.extra_data.len()
+                        ),
+                    ));
+                }
+                out.extend_from_slice(&data.flags.to_be_bytes());
+                out.extend_from_slice(&data.extra_data);
+            }
+            ObjectData::Scenery(data) => {
+                out.extend_from_slice(&data.flags.to_be_bytes());
+            }
+            ObjectData::Misc(data) => {
+                out.extend_from_slice(&data.map.to_be_bytes());
+                out.extend_from_slice(&data.tile.to_be_bytes());
+                out.extend_from_slice(&data.elevation.to_be_bytes());
+                out.extend_from_slice(&data.rotation.to_be_bytes());
+            }
+            ObjectData::Other => {}
+        }
+
+        for item in &self.inventory {
+            out.extend_from_slice(&item.quantity.to_be_bytes());
+            item.object.emit_to_vec(out)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn emit_bytes(&self) -> io::Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.emit_to_vec(&mut out)?;
+        Ok(out)
+    }
 }
 
 fn parse_critter_object_data<R: Read + Seek>(
@@ -231,10 +316,12 @@ fn parse_item_object_data<R: Read + Seek>(
         }
     }
 
-    r.seek_to(pos_after_flags + best_extra as u64)?;
+    r.seek_to(pos_after_flags)?;
+    let extra_data = r.read_bytes(best_extra as usize)?;
     Ok(ItemObjectData {
         flags,
         extra_bytes: best_extra,
+        extra_data,
     })
 }
 

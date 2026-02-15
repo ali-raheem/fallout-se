@@ -6,6 +6,15 @@ use fallout_core::core_api::{
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
+const THREE_COL_WIDTH_A: usize = 25;
+const THREE_COL_WIDTH_B: usize = 24;
+const THREE_COL_WIDTH_C: usize = 25;
+const TWO_COL_WIDTH_LEFT: usize = 30;
+const TWO_COL_WIDTH_RIGHT: usize = 44;
+const INVENTORY_COL_WIDTH_A: usize = 25;
+const INVENTORY_COL_WIDTH_B: usize = 25;
+const INVENTORY_COL_WIDTH_C: usize = 23;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonStyle {
     #[default]
@@ -16,6 +25,11 @@ pub enum JsonStyle {
 pub enum TextStyle {
     #[default]
     ClassicFallout,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TextRenderOptions {
+    pub verbose: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -92,12 +106,24 @@ pub fn render_json_selected(
 }
 
 pub fn render_classic_sheet(session: &Session) -> String {
-    render_text(session, TextStyle::ClassicFallout)
+    render_classic_sheet_with_options(session, TextRenderOptions::default())
 }
 
 pub fn render_text(session: &Session, style: TextStyle) -> String {
+    render_text_with_options(session, style, TextRenderOptions::default())
+}
+
+pub fn render_classic_sheet_with_options(session: &Session, options: TextRenderOptions) -> String {
+    render_text_with_options(session, TextStyle::ClassicFallout, options)
+}
+
+pub fn render_text_with_options(
+    session: &Session,
+    style: TextStyle,
+    options: TextRenderOptions,
+) -> String {
     match style {
-        TextStyle::ClassicFallout => render_classic_sheet_impl(session),
+        TextStyle::ClassicFallout => render_classic_sheet_impl(session, options),
     }
 }
 
@@ -419,7 +445,7 @@ fn traits_to_json(traits: &[TraitEntry]) -> JsonValue {
     )
 }
 
-fn render_classic_sheet_impl(session: &Session) -> String {
+fn render_classic_sheet_impl(session: &Session, options: TextRenderOptions) -> String {
     let snapshot = session.snapshot();
 
     let title = match session.game() {
@@ -441,9 +467,12 @@ fn render_classic_sheet_impl(session: &Session) -> String {
     let mut out = String::new();
     writeln!(&mut out).expect("writing to String cannot fail");
     writeln!(&mut out).expect("writing to String cannot fail");
-    writeln!(&mut out, "{:^76}", title).expect("writing to String cannot fail");
-    writeln!(&mut out, "{:^76}", subtitle).expect("writing to String cannot fail");
-    writeln!(&mut out, "{:^76}", date_time_str).expect("writing to String cannot fail");
+    writeln!(&mut out, "{}", centered_no_trailing(title, 76))
+        .expect("writing to String cannot fail");
+    writeln!(&mut out, "{}", centered_no_trailing(subtitle, 76))
+        .expect("writing to String cannot fail");
+    writeln!(&mut out, "{}", centered_no_trailing(&date_time_str, 76))
+        .expect("writing to String cannot fail");
     writeln!(&mut out).expect("writing to String cannot fail");
 
     let name_section = format!("  Name: {:<19}", snapshot.character_name);
@@ -595,31 +624,203 @@ fn render_classic_sheet_impl(session: &Session) -> String {
 
     let traits = session.selected_traits();
     let perks = session.active_perks();
+    let skills = session.skills();
+    let kills = if options.verbose {
+        session.all_kill_counts()
+    } else {
+        session.nonzero_kill_counts()
+    };
+    let inventory = session.inventory();
 
-    writeln!(
+    write_traits_perks_karma_grid(
         &mut out,
-        " ::: Traits :::           ::: Perks :::           ::: Karma :::"
-    )
-    .expect("writing to String cannot fail");
-    for t in &traits {
-        writeln!(&mut out, "  {}", t.name).expect("writing to String cannot fail");
-    }
-
-    if !perks.is_empty() {
-        writeln!(&mut out, " ::: Skills :::                ::: Kills :::")
-            .expect("writing to String cannot fail");
-        for p in &perks {
-            if p.rank > 1 {
-                writeln!(&mut out, "  {} ({})", p.name, p.rank)
-                    .expect("writing to String cannot fail");
-            } else {
-                writeln!(&mut out, "  {}", p.name).expect("writing to String cannot fail");
-            }
-        }
-    }
+        &traits,
+        &perks,
+        snapshot.karma,
+        snapshot.reputation,
+    );
+    writeln!(&mut out).expect("writing to String cannot fail");
+    write_skills_kills_grid(&mut out, &skills, &kills);
+    writeln!(&mut out).expect("writing to String cannot fail");
+    write_inventory_section(&mut out, &inventory, None);
     writeln!(&mut out).expect("writing to String cannot fail");
 
     out
+}
+
+fn write_traits_perks_karma_grid(
+    out: &mut String,
+    traits: &[TraitEntry],
+    perks: &[PerkEntry],
+    karma: i32,
+    reputation: i32,
+) {
+    writeln!(
+        out,
+        " ::: Traits :::           ::: Perks :::           ::: Karma :::"
+    )
+    .expect("writing to String cannot fail");
+
+    let trait_lines: Vec<String> = if traits.is_empty() {
+        vec!["none".to_string()]
+    } else {
+        traits.iter().map(|entry| entry.name.clone()).collect()
+    };
+    let perk_lines: Vec<String> = if perks.is_empty() {
+        vec!["none".to_string()]
+    } else {
+        perks
+            .iter()
+            .map(|entry| {
+                if entry.rank > 1 {
+                    format!("{} ({})", entry.name, entry.rank)
+                } else {
+                    entry.name.clone()
+                }
+            })
+            .collect()
+    };
+    let karma_lines = vec![
+        format!("Karma: {karma}"),
+        format!("Reputation: {reputation}"),
+    ];
+
+    let row_count = trait_lines
+        .len()
+        .max(perk_lines.len())
+        .max(karma_lines.len());
+    for row in 0..row_count {
+        let left = trait_lines.get(row).map(String::as_str).unwrap_or("");
+        let middle = perk_lines.get(row).map(String::as_str).unwrap_or("");
+        let right = karma_lines.get(row).map(String::as_str).unwrap_or("");
+        let line = format!(
+            " {:<a$}{:<b$}{:<c$}",
+            fit_column(left, THREE_COL_WIDTH_A),
+            fit_column(middle, THREE_COL_WIDTH_B),
+            fit_column(right, THREE_COL_WIDTH_C),
+            a = THREE_COL_WIDTH_A,
+            b = THREE_COL_WIDTH_B,
+            c = THREE_COL_WIDTH_C
+        );
+        writeln!(out, "{}", line.trim_end()).expect("writing to String cannot fail");
+    }
+}
+
+fn write_skills_kills_grid(out: &mut String, skills: &[SkillEntry], kills: &[KillCountEntry]) {
+    writeln!(out, " ::: Skills :::                ::: Kills :::")
+        .expect("writing to String cannot fail");
+
+    let skill_lines: Vec<String> = if skills.is_empty() {
+        vec!["none".to_string()]
+    } else {
+        skills
+            .iter()
+            .map(|entry| {
+                if entry.tagged {
+                    format!("{}: {} *", entry.name, entry.value)
+                } else {
+                    format!("{}: {}", entry.name, entry.value)
+                }
+            })
+            .collect()
+    };
+    let kill_lines: Vec<String> = if kills.is_empty() {
+        vec!["none".to_string()]
+    } else {
+        kills
+            .iter()
+            .map(|entry| format!("{}: {}", entry.name, entry.count))
+            .collect()
+    };
+
+    let row_count = skill_lines.len().max(kill_lines.len());
+    for row in 0..row_count {
+        let left = skill_lines.get(row).map(String::as_str).unwrap_or("");
+        let right = kill_lines.get(row).map(String::as_str).unwrap_or("");
+        let line = format!(
+            " {:<a$}{:<b$}",
+            fit_column(left, TWO_COL_WIDTH_LEFT),
+            fit_column(right, TWO_COL_WIDTH_RIGHT),
+            a = TWO_COL_WIDTH_LEFT,
+            b = TWO_COL_WIDTH_RIGHT
+        );
+        writeln!(out, "{}", line.trim_end()).expect("writing to String cannot fail");
+    }
+}
+
+fn write_inventory_section(
+    out: &mut String,
+    inventory: &[InventoryEntry],
+    total_weight_lbs: Option<i32>,
+) {
+    writeln!(out, " ::: Inventory :::").expect("writing to String cannot fail");
+    writeln!(out).expect("writing to String cannot fail");
+
+    let total_weight_label = match total_weight_lbs {
+        Some(value) => format!("{value} lbs."),
+        None => "unknown".to_string(),
+    };
+    writeln!(out, "{:>52}", format!("Total Weight: {total_weight_label}"))
+        .expect("writing to String cannot fail");
+    writeln!(out).expect("writing to String cannot fail");
+
+    if inventory.is_empty() {
+        writeln!(out, "  none").expect("writing to String cannot fail");
+        return;
+    }
+
+    let rows: Vec<String> = inventory
+        .iter()
+        .map(|entry| {
+            format!(
+                "{}x pid={:08X}",
+                format_number_with_commas(entry.quantity),
+                entry.pid as u32
+            )
+        })
+        .collect();
+
+    for chunk in rows.chunks(3) {
+        let col1 = chunk.first().map(String::as_str).unwrap_or("");
+        let col2 = chunk.get(1).map(String::as_str).unwrap_or("");
+        let col3 = chunk.get(2).map(String::as_str).unwrap_or("");
+        let line = format!(
+            "  {:<a$}{:<b$}{:<c$}",
+            fit_column(col1, INVENTORY_COL_WIDTH_A),
+            fit_column(col2, INVENTORY_COL_WIDTH_B),
+            fit_column(col3, INVENTORY_COL_WIDTH_C),
+            a = INVENTORY_COL_WIDTH_A,
+            b = INVENTORY_COL_WIDTH_B,
+            c = INVENTORY_COL_WIDTH_C
+        );
+        writeln!(out, "{}", line.trim_end()).expect("writing to String cannot fail");
+    }
+}
+
+fn fit_column(value: &str, width: usize) -> String {
+    if value.chars().count() <= width {
+        return value.to_string();
+    }
+    if width <= 3 {
+        return value.chars().take(width).collect();
+    }
+
+    let mut out = String::with_capacity(width);
+    for ch in value.chars().take(width - 3) {
+        out.push(ch);
+    }
+    out.push_str("...");
+    out
+}
+
+fn centered_no_trailing(value: &str, width: usize) -> String {
+    let len = value.chars().count();
+    if len >= width {
+        return value.to_string();
+    }
+
+    let left_padding = (width - len) / 2;
+    format!("{}{}", " ".repeat(left_padding), value)
 }
 
 fn format_date(year: i16, month: i16, day: i16) -> String {

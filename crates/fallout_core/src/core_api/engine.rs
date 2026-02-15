@@ -227,6 +227,33 @@ impl Session {
             .collect()
     }
 
+    pub fn all_kill_counts(&self) -> Vec<KillCountEntry> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => doc
+                .save
+                .kill_counts
+                .iter()
+                .enumerate()
+                .map(|(index, &count)| KillCountEntry {
+                    index,
+                    name: f1_types::KILL_TYPE_NAMES[index].to_string(),
+                    count,
+                })
+                .collect(),
+            LoadedDocument::Fallout2(doc) => doc
+                .save
+                .kill_counts
+                .iter()
+                .enumerate()
+                .map(|(index, &count)| KillCountEntry {
+                    index,
+                    name: f2_types::KILL_TYPE_NAMES[index].to_string(),
+                    count,
+                })
+                .collect(),
+        }
+    }
+
     pub fn nonzero_kill_counts(&self) -> Vec<KillCountEntry> {
         match &self.document {
             LoadedDocument::Fallout1(doc) => doc
@@ -524,6 +551,121 @@ impl Session {
         self.snapshot.karma = karma;
         Ok(())
     }
+
+    pub fn set_trait(&mut self, slot: usize, trait_index: usize) -> Result<(), CoreError> {
+        let trait_index_i32 = i32::try_from(trait_index).map_err(|_| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("invalid trait index {trait_index}"),
+            )
+        })?;
+
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_trait(slot, trait_index_i32),
+            LoadedDocument::Fallout2(doc) => doc.set_trait(slot, trait_index_i32),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set trait in slot {slot}: {e}"),
+            )
+        })?;
+
+        self.sync_snapshot_selected_traits();
+        Ok(())
+    }
+
+    pub fn clear_trait(&mut self, slot: usize) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.clear_trait(slot),
+            LoadedDocument::Fallout2(doc) => doc.clear_trait(slot),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to clear trait in slot {slot}: {e}"),
+            )
+        })?;
+
+        self.sync_snapshot_selected_traits();
+        Ok(())
+    }
+
+    pub fn set_perk_rank(&mut self, perk_index: usize, rank: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_perk_rank(perk_index, rank),
+            LoadedDocument::Fallout2(doc) => doc.set_perk_rank(perk_index, rank),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set perk {perk_index} rank: {e}"),
+            )
+        })
+    }
+
+    pub fn clear_perk(&mut self, perk_index: usize) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.clear_perk(perk_index),
+            LoadedDocument::Fallout2(doc) => doc.clear_perk(perk_index),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to clear perk {perk_index}: {e}"),
+            )
+        })
+    }
+
+    pub fn set_inventory_quantity(&mut self, pid: i32, quantity: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_inventory_quantity(pid, quantity),
+            LoadedDocument::Fallout2(doc) => doc.set_inventory_quantity(pid, quantity),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set inventory quantity for pid={pid}: {e}"),
+            )
+        })
+    }
+
+    pub fn add_inventory_item(&mut self, pid: i32, quantity: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.add_inventory_item(pid, quantity),
+            LoadedDocument::Fallout2(doc) => doc.add_inventory_item(pid, quantity),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to add inventory item pid={pid}: {e}"),
+            )
+        })
+    }
+
+    pub fn remove_inventory_item(
+        &mut self,
+        pid: i32,
+        quantity: Option<i32>,
+    ) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.remove_inventory_item(pid, quantity),
+            LoadedDocument::Fallout2(doc) => doc.remove_inventory_item(pid, quantity),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to remove inventory item pid={pid}: {e}"),
+            )
+        })
+    }
+
+    fn sync_snapshot_selected_traits(&mut self) {
+        self.snapshot.selected_traits = match &self.document {
+            LoadedDocument::Fallout1(doc) => doc.save.selected_traits,
+            LoadedDocument::Fallout2(doc) => doc.save.selected_traits,
+        };
+    }
 }
 
 fn parse_fallout1(bytes: &[u8]) -> std::io::Result<fallout1::Document> {
@@ -568,14 +710,14 @@ fn session_from_fallout1(doc: fallout1::Document) -> Session {
     Session {
         game: Game::Fallout1,
         snapshot,
-        capabilities: Capabilities::read_only(vec![CapabilityIssue::EditingNotImplemented]),
+        capabilities: Capabilities::editable(Vec::new()),
         document: LoadedDocument::Fallout1(Box::new(doc)),
     }
 }
 
 fn session_from_fallout2(doc: fallout2::Document) -> Session {
     let save = &doc.save;
-    let mut issues = vec![CapabilityIssue::EditingNotImplemented];
+    let mut issues = Vec::new();
     if save.layout_detection_score <= 0 {
         issues.push(CapabilityIssue::LowConfidenceLayout);
     }
@@ -612,7 +754,7 @@ fn session_from_fallout2(doc: fallout2::Document) -> Session {
     Session {
         game: Game::Fallout2,
         snapshot,
-        capabilities: Capabilities::read_only(issues),
+        capabilities: Capabilities::editable(issues),
         document: LoadedDocument::Fallout2(Box::new(doc)),
     }
 }

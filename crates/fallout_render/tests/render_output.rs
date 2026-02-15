@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use fallout_core::core_api::{Engine, Session};
 use fallout_render::{
-    FieldSelection, JsonStyle, render_classic_sheet, render_json_full, render_json_selected,
+    FieldSelection, JsonStyle, TextRenderOptions, render_classic_sheet,
+    render_classic_sheet_with_options, render_json_full, render_json_selected,
 };
 use serde_json::Value;
 
@@ -117,8 +118,9 @@ fn classic_sheet_contains_expected_sections() {
     assert!(rendered.contains("VAULT-13 PERSONNEL RECORD"));
     assert!(rendered.contains("Name: Clairey"));
     assert!(rendered.contains("Strength:"));
-    assert!(rendered.contains(" ::: Traits :::"));
-    assert!(rendered.contains(" ::: Karma :::"));
+    assert!(rendered.contains("::: Traits :::"));
+    assert!(rendered.contains("::: Perks :::"));
+    assert!(rendered.contains("::: Karma :::"));
 
     let json = render_json_full(&session, JsonStyle::CanonicalV1);
     let json: Value = serde_json::from_str(
@@ -126,4 +128,36 @@ fn classic_sheet_contains_expected_sections() {
     )
     .expect("serialized json should parse");
     assert_eq!(json["game"], "Fallout1");
+}
+
+#[test]
+fn classic_sheet_includes_plain_text_detail_sections() {
+    let session = session_from_path(fallout1_save_path(1));
+    let rendered = render_classic_sheet(&session);
+
+    assert!(rendered.contains("::: Traits :::"));
+    assert!(rendered.contains("::: Perks :::"));
+    assert!(rendered.contains("::: Karma :::"));
+    assert!(rendered.contains("  Karma: "));
+    assert!(rendered.contains("  Reputation: "));
+    assert!(rendered.contains("::: Skills :::"));
+    assert!(rendered.contains("Small Guns:"));
+    assert!(rendered.contains("::: Kills :::"));
+    assert!(rendered.contains("Man: 42"));
+    assert!(rendered.contains(" ::: Inventory :::"));
+    assert!(rendered.contains("Total Weight:"));
+    assert!(rendered.contains("pid="));
+}
+
+#[test]
+fn classic_sheet_verbose_includes_zero_kill_counts() {
+    let session = session_from_path(fallout1_save_path(1));
+    let rendered = render_classic_sheet_with_options(&session, TextRenderOptions { verbose: true });
+
+    let zero_kill = session
+        .all_kill_counts()
+        .into_iter()
+        .find(|entry| entry.count == 0)
+        .expect("fixture should have at least one zero kill count");
+    assert!(rendered.contains(&format!("{}: 0", zero_kill.name)));
 }

@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use fallout_core::core_api::{CapabilityIssue, CoreErrorCode, Engine, Game};
+use fallout_core::core_api::{CoreErrorCode, Engine, Game};
 use fallout_core::gender::Gender;
 use fallout_core::{fallout1, fallout2};
 
@@ -53,12 +53,8 @@ fn engine_auto_detects_fallout1() {
 
     let caps = session.capabilities();
     assert!(caps.can_query);
-    assert!(!caps.can_plan_edits);
-    assert!(!caps.can_apply_edits);
-    assert!(
-        caps.issues
-            .contains(&CapabilityIssue::EditingNotImplemented)
-    );
+    assert!(caps.can_plan_edits);
+    assert!(caps.can_apply_edits);
 }
 
 #[test]
@@ -79,12 +75,8 @@ fn engine_auto_detects_fallout2() {
 
     let caps = session.capabilities();
     assert!(caps.can_query);
-    assert!(!caps.can_plan_edits);
-    assert!(!caps.can_apply_edits);
-    assert!(
-        caps.issues
-            .contains(&CapabilityIssue::EditingNotImplemented)
-    );
+    assert!(caps.can_plan_edits);
+    assert!(caps.can_apply_edits);
 }
 
 #[test]
@@ -414,4 +406,143 @@ fn session_can_edit_age_level_and_xp_fallout2() {
     assert_eq!(reparsed.snapshot().unspent_skill_points, 9);
     assert_eq!(reparsed.snapshot().reputation, -12);
     assert_eq!(reparsed.snapshot().karma, 250);
+}
+
+#[test]
+fn session_can_edit_traits_perks_and_inventory_fallout1() {
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    let inventory = session.inventory();
+    let first_item = inventory.first().expect("fixture should have inventory");
+    let pid = first_item.pid;
+    let base_qty = first_item.quantity.max(1);
+
+    session
+        .set_perk_rank(2, 1)
+        .expect("failed to set Fallout 1 perk");
+    session
+        .clear_perk(3)
+        .expect("failed to clear Fallout 1 perk");
+    session
+        .set_inventory_quantity(pid, base_qty + 2)
+        .expect("failed to set Fallout 1 inventory quantity");
+    session
+        .add_inventory_item(pid, 3)
+        .expect("failed to add Fallout 1 inventory quantity");
+    session
+        .remove_inventory_item(pid, Some(1))
+        .expect("failed to remove Fallout 1 inventory quantity");
+
+    let expected_qty = session
+        .inventory()
+        .into_iter()
+        .find(|item| item.pid == pid)
+        .expect("edited item should remain")
+        .quantity;
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 1 bytes");
+
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout1))
+        .expect("failed to parse modified Fallout 1 bytes");
+
+    assert!(
+        reparsed
+            .active_perks()
+            .iter()
+            .any(|perk| perk.index == 2 && perk.rank == 1)
+    );
+    assert!(reparsed.active_perks().iter().all(|perk| perk.index != 3));
+    assert_eq!(
+        reparsed
+            .inventory()
+            .into_iter()
+            .find(|item| item.pid == pid)
+            .expect("edited item should be present after reparse")
+            .quantity,
+        expected_qty
+    );
+
+    let err = session
+        .add_inventory_item(i32::MIN, 1)
+        .expect_err("unknown PID should fail to add");
+    assert_eq!(err.code, CoreErrorCode::UnsupportedOperation);
+}
+
+#[test]
+fn session_can_edit_traits_perks_and_inventory_fallout2() {
+    let engine = Engine::new();
+    let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout2))
+        .expect("failed to open Fallout 2 save");
+
+    let inventory = session.inventory();
+    let first_item = inventory.first().expect("fixture should have inventory");
+    let pid = first_item.pid;
+    let base_qty = first_item.quantity.max(1);
+
+    session
+        .set_trait(0, 1)
+        .expect("failed to set Fallout 2 trait slot 0");
+    session
+        .clear_trait(1)
+        .expect("failed to clear Fallout 2 trait slot 1");
+    session
+        .set_perk_rank(0, 1)
+        .expect("failed to set Fallout 2 perk");
+    session
+        .clear_perk(1)
+        .expect("failed to clear Fallout 2 perk");
+    session
+        .set_inventory_quantity(pid, base_qty + 1)
+        .expect("failed to set Fallout 2 inventory quantity");
+    session
+        .add_inventory_item(pid, 4)
+        .expect("failed to add Fallout 2 inventory quantity");
+    session
+        .remove_inventory_item(pid, Some(2))
+        .expect("failed to remove Fallout 2 inventory quantity");
+
+    let expected_qty = session
+        .inventory()
+        .into_iter()
+        .find(|item| item.pid == pid)
+        .expect("edited item should remain")
+        .quantity;
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 2 bytes");
+
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout2))
+        .expect("failed to parse modified Fallout 2 bytes");
+
+    assert_eq!(reparsed.snapshot().selected_traits[0], 1);
+    assert_eq!(reparsed.snapshot().selected_traits[1], -1);
+    assert!(
+        reparsed
+            .active_perks()
+            .iter()
+            .any(|perk| perk.index == 0 && perk.rank == 1)
+    );
+    assert!(reparsed.active_perks().iter().all(|perk| perk.index != 1));
+    assert_eq!(
+        reparsed
+            .inventory()
+            .into_iter()
+            .find(|item| item.pid == pid)
+            .expect("edited item should be present after reparse")
+            .quantity,
+        expected_qty
+    );
 }

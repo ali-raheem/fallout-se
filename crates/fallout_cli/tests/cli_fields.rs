@@ -5,6 +5,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fallout_core::fallout1::SaveGame as Fallout1SaveGame;
+use fallout_core::fallout1::types as f1_types;
 use fallout_core::fallout2::SaveGame as Fallout2SaveGame;
 use serde_json::Value;
 
@@ -85,6 +86,53 @@ fn cli_without_field_flags_keeps_verbose_dump() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("FALLOUT"));
     assert!(stdout.contains("PERSONNEL RECORD"));
+}
+
+#[test]
+fn cli_default_text_includes_detailed_sections() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&[&path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("::: Traits :::"));
+    assert!(stdout.contains("::: Perks :::"));
+    assert!(stdout.contains("::: Karma :::"));
+    assert!(stdout.contains("  Karma: "));
+    assert!(stdout.contains("  Reputation: "));
+    assert!(stdout.contains("::: Skills :::"));
+    assert!(stdout.contains("Small Guns:"));
+    assert!(stdout.contains("::: Kills :::"));
+    assert!(stdout.contains("Man: 42"));
+    assert!(stdout.contains(" ::: Inventory :::"));
+    assert!(stdout.contains("Total Weight:"));
+    assert!(stdout.contains("pid="));
+}
+
+#[test]
+fn cli_verbose_text_includes_zero_kill_counts() {
+    let path = fallout1_save_path(1);
+    let path_str = path.to_string_lossy().to_string();
+    let output = run_cli(&["--verbose", &path_str]);
+    assert!(output.status.success());
+
+    let save = Fallout1SaveGame::parse(BufReader::new(
+        File::open(&path).expect("fixture should open"),
+    ))
+    .expect("fixture should parse");
+    let zero_index = save
+        .kill_counts
+        .iter()
+        .position(|&count| count == 0)
+        .expect("fixture should have at least one zero kill count");
+    let kill_name = f1_types::KILL_TYPE_NAMES[zero_index];
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(&format!("{kill_name}: 0")),
+        "expected zero-count kill '{kill_name}: 0' in verbose output"
+    );
 }
 
 #[test]
@@ -364,4 +412,127 @@ fn cli_can_set_skill_points_karma_reputation_and_write_output_file() {
     assert_eq!(save.pc_stats.reputation, -5);
 
     let _ = std::fs::remove_file(&out_path);
+}
+
+#[test]
+fn cli_can_edit_traits_perks_and_inventory() {
+    let path = fallout2_save_path(1);
+    let path_s = path.to_string_lossy().to_string();
+    let source = Fallout2SaveGame::parse(BufReader::new(
+        File::open(&path).expect("fixture should open"),
+    ))
+    .expect("fixture should parse");
+
+    let first_item = source
+        .player_object
+        .inventory
+        .first()
+        .expect("fixture should have inventory");
+    let pid = first_item.object.pid;
+    let base_qty = first_item.quantity.max(1);
+
+    let out_path = temp_output_path("fallout_se_traits_perks_inventory");
+    let out_path_s = out_path.to_string_lossy().to_string();
+    let set_item_qty = format!("{pid}:{}", base_qty + 2);
+    let add_item = format!("{pid}:3");
+    let remove_item = format!("{pid}:1");
+
+    let output = run_cli(&[
+        "--set-trait",
+        "0:0",
+        "--clear-trait",
+        "1",
+        "--set-perk",
+        "2:1",
+        "--clear-perk",
+        "3",
+        "--set-item-qty",
+        &set_item_qty,
+        "--add-item",
+        &add_item,
+        "--remove-item",
+        &remove_item,
+        "--output",
+        &out_path_s,
+        "--traits",
+        "--perks",
+        "--inventory",
+        &path_s,
+    ]);
+    assert!(output.status.success());
+
+    let file = File::open(&out_path).expect("expected output file to be created");
+    let save = Fallout2SaveGame::parse(BufReader::new(file))
+        .expect("output file should parse as Fallout 2 save");
+    assert_eq!(save.selected_traits[0], 0);
+    assert_eq!(save.selected_traits[1], -1);
+    assert_eq!(save.perks[2], 1);
+    assert_eq!(save.perks[3], 0);
+
+    let edited_qty = save
+        .player_object
+        .inventory
+        .iter()
+        .find(|item| item.object.pid == pid)
+        .expect("edited pid should still exist")
+        .quantity;
+    assert_eq!(edited_qty, base_qty + 4);
+
+    let _ = std::fs::remove_file(&out_path);
+}
+
+#[test]
+fn cli_refuses_to_overwrite_output_without_force_flag() {
+    let path = fallout2_save_path(1);
+    let path_s = path.to_string_lossy().to_string();
+    let out_path = temp_output_path("fallout_se_overwrite_block");
+    let out_path_s = out_path.to_string_lossy().to_string();
+    let existing_bytes = std::fs::read(&path).expect("fixture should read");
+    std::fs::write(&out_path, &existing_bytes).expect("should create placeholder output");
+
+    let output = run_cli(&["--set-level", "5", "--output", &out_path_s, &path_s]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("refusing to overwrite existing file"));
+
+    let unchanged = std::fs::read(&out_path).expect("output should still exist");
+    assert_eq!(unchanged, existing_bytes);
+
+    let _ = std::fs::remove_file(&out_path);
+}
+
+#[test]
+fn cli_can_force_overwrite_and_create_backup() {
+    let path = fallout2_save_path(1);
+    let path_s = path.to_string_lossy().to_string();
+    let out_path = temp_output_path("fallout_se_overwrite_backup");
+    let out_path_s = out_path.to_string_lossy().to_string();
+
+    let original_bytes = std::fs::read(&path).expect("fixture should read");
+    std::fs::write(&out_path, &original_bytes).expect("should create placeholder output");
+
+    let output = run_cli(&[
+        "--set-level",
+        "5",
+        "--force-overwrite",
+        "--backup",
+        "--output",
+        &out_path_s,
+        &path_s,
+    ]);
+    assert!(output.status.success());
+
+    let backup_path = PathBuf::from(format!("{}.bak", out_path.to_string_lossy()));
+    assert!(backup_path.exists());
+    let backup_bytes = std::fs::read(&backup_path).expect("backup should be readable");
+    assert_eq!(backup_bytes, original_bytes);
+
+    let file = File::open(&out_path).expect("expected output file to be replaced");
+    let save = Fallout2SaveGame::parse(BufReader::new(file))
+        .expect("overwritten output should parse as Fallout 2 save");
+    assert_eq!(save.pc_stats.level, 5);
+
+    let _ = std::fs::remove_file(&out_path);
+    let _ = std::fs::remove_file(&backup_path);
 }

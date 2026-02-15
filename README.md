@@ -17,17 +17,27 @@ This project is still a work in progress. If a save does not parse or dump corre
 
 ### Working
 - Parse `SAVE.DAT` for Fallout 1 and Fallout 2 with auto-detection.
-- **Game-style character sheet** — default text output matches the Fallout in-game print screen (centered title, 3-column SPECIAL/derived stats, traits/perks sections).
+- **Game-style character sheet** — default text output matches the Fallout in-game print screen and now includes gameplay detail sections (karma/reputation, skills, kills, inventory).
 - **Comprehensive JSON output** with `--json` — includes SPECIAL stats, derived stats, skills, perks, kill counts, inventory, game time, max HP, next level XP.
 - **Query individual fields** — `--name`, `--description`, `--gender`, `--age`, `--level`, `--xp`, `--karma`, `--reputation`, `--skill-points`, `--map`, `--game-date`, `--save-date`, `--hp`, `--max-hp`, `--next-level-xp`, `--game-time`, `--special`, `--derived-stats`, `--skills`, `--perks`, `--kills`, `--inventory`, `--traits`.
+- `--verbose` for exhaustive plain-text lists (including zero-count kill types).
 - Safe edits written to a new file via `--output`:
   - `--set-gender`, `--set-age`, `--set-level`, `--set-xp`
   - `--set-skill-points`, `--set-karma`, `--set-reputation`
   - `--set-strength`, `--set-perception`, `--set-endurance`, `--set-charisma`, `--set-intelligence`, `--set-agility`, `--set-luck`
   - `--set-hp`
+  - `--set-trait SLOT:INDEX`, `--clear-trait SLOT`
+  - `--set-perk INDEX:RANK`, `--clear-perk INDEX`
+  - `--set-item-qty PID:QTY`, `--add-item PID:QTY`, `--remove-item PID[:QTY]`
+- Safer output workflow for edits:
+  - Refuses overwrite by default when `--output` already exists.
+  - `--force-overwrite` allows replacement.
+  - `--backup` keeps a `.bak` copy of the previous output file before overwrite.
+  - Atomic temp-file write + rename.
 
 ### Not Working Yet
-- Advanced edits (inventory, object graph, perks/traits, world state).
+- Full world-state/object-graph editing.
+- Creating a brand-new inventory PID that does not already exist in the save (current `--add-item` increments an existing PID stack).
 
 ## CLI Usage
 
@@ -66,6 +76,12 @@ Query selected fields:
 fallout-se --gender --level --xp path/to/SAVE.DAT
 ```
 
+Verbose plain text (includes zero-count kills):
+
+```bash
+fallout-se --verbose path/to/SAVE.DAT
+```
+
 JSON output (all data):
 
 ```bash
@@ -94,6 +110,39 @@ fallout-se --fallout1 \
   --output path/to/SAVE_EDITED.DAT \
   --gender --skill-points \
   path/to/SAVE.DAT
+```
+
+Edit traits/perks/inventory and overwrite an existing output safely:
+
+```bash
+fallout-se \
+  --set-trait 0:15 \
+  --set-perk 2:1 \
+  --set-item-qty 0x00000029:200 \
+  --add-item 0x00000029:20 \
+  --remove-item 0x00000029:5 \
+  --force-overwrite --backup \
+  --output path/to/SAVE_EDITED.DAT \
+  path/to/SAVE.DAT
+```
+
+Debug and diagnostics:
+
+```bash
+# high-level parser/capability summary
+fallout-se debug summary --json path/to/SAVE.DAT
+
+# section layout and byte ranges
+fallout-se debug layout --json path/to/SAVE.DAT
+
+# validate parse/layout confidence (non-zero on errors; with --strict also on warnings)
+fallout-se debug validate --json --strict path/to/SAVE.DAT
+
+# inspect one section and emit a bounded hex preview
+fallout-se debug section --id handler:13 --hex path/to/SAVE.DAT
+
+# compare two saves
+fallout-se debug compare --json path/to/A.DAT path/to/B.DAT
 ```
 
 ## License

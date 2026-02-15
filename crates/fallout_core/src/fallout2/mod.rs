@@ -244,6 +244,7 @@ pub struct Document {
     layout: FileLayout,
     section_blobs: Vec<SectionBlob>,
     original_section_blobs: Vec<SectionBlob>,
+    original_file_len: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -312,6 +313,7 @@ impl Document {
             layout,
             section_blobs: capture.blobs,
             original_section_blobs,
+            original_file_len: file_len,
         })
     }
 
@@ -326,12 +328,13 @@ impl Document {
     pub fn to_bytes_unmodified(&self) -> io::Result<Vec<u8>> {
         emit_from_blobs(
             &self.original_section_blobs,
-            self.layout.file_len,
+            self.original_file_len,
             "unmodified",
         )
     }
 
     pub fn to_bytes_modified(&self) -> io::Result<Vec<u8>> {
+        self.validate_modified_state()?;
         emit_from_blobs(&self.section_blobs, self.layout.file_len, "modified")
     }
 
@@ -400,6 +403,197 @@ impl Document {
         Ok(())
     }
 
+    pub fn set_trait(&mut self, slot: usize, trait_index: i32) -> io::Result<()> {
+        if slot >= self.save.selected_traits.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid trait slot {slot}, expected 0..{}",
+                    self.save.selected_traits.len() - 1
+                ),
+            ));
+        }
+        if trait_index < 0 || trait_index as usize >= types::TRAIT_NAMES.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid trait index {trait_index}, expected 0..{}",
+                    types::TRAIT_NAMES.len() - 1
+                ),
+            ));
+        }
+
+        self.patch_trait_slot(slot, trait_index)?;
+        self.save.selected_traits[slot] = trait_index;
+        Ok(())
+    }
+
+    pub fn clear_trait(&mut self, slot: usize) -> io::Result<()> {
+        if slot >= self.save.selected_traits.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid trait slot {slot}, expected 0..{}",
+                    self.save.selected_traits.len() - 1
+                ),
+            ));
+        }
+
+        self.patch_trait_slot(slot, -1)?;
+        self.save.selected_traits[slot] = -1;
+        Ok(())
+    }
+
+    pub fn set_perk_rank(&mut self, perk_index: usize, rank: i32) -> io::Result<()> {
+        if perk_index >= self.save.perks.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid perk index {perk_index}, expected 0..{}",
+                    self.save.perks.len() - 1
+                ),
+            ));
+        }
+        if !(-1..=20).contains(&rank) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid perk rank {rank}, expected -1..20"),
+            ));
+        }
+
+        let offset = perk_index * I32_WIDTH;
+        let blob = self.section_blob_mut(SectionId::Handler(10))?;
+        patch_i32_in_blob(blob, offset, rank, "handler 10", "perk rank")?;
+        self.save.perks[perk_index] = rank;
+        Ok(())
+    }
+
+    pub fn clear_perk(&mut self, perk_index: usize) -> io::Result<()> {
+        self.set_perk_rank(perk_index, 0)
+    }
+
+    pub fn set_inventory_quantity(&mut self, pid: i32, quantity: i32) -> io::Result<()> {
+        if quantity < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid inventory quantity {quantity}, expected >= 0"),
+            ));
+        }
+
+        let mut found = false;
+        let mut assigned = false;
+        self.save.player_object.inventory.retain_mut(|item| {
+            if item.object.pid != pid {
+                return true;
+            }
+            found = true;
+            if quantity == 0 {
+                return false;
+            }
+            if assigned {
+                return false;
+            }
+
+            item.quantity = quantity;
+            assigned = true;
+            true
+        });
+
+        if !found {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("inventory item pid={pid} not found"),
+            ));
+        }
+
+        self.rewrite_handler5_from_player_object()
+    }
+
+    pub fn add_inventory_item(&mut self, pid: i32, quantity: i32) -> io::Result<()> {
+        if quantity <= 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid inventory quantity {quantity}, expected > 0"),
+            ));
+        }
+
+        let mut found = false;
+        for item in &mut self.save.player_object.inventory {
+            if item.object.pid == pid {
+                item.quantity = item.quantity.checked_add(quantity).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "inventory quantity overflow for pid={pid}: {} + {quantity}",
+                            item.quantity
+                        ),
+                    )
+                })?;
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("cannot add new inventory pid={pid}: no existing template item in save"),
+            ));
+        }
+
+        self.rewrite_handler5_from_player_object()
+    }
+
+    pub fn remove_inventory_item(&mut self, pid: i32, quantity: Option<i32>) -> io::Result<()> {
+        let total_before: i64 = self
+            .save
+            .player_object
+            .inventory
+            .iter()
+            .filter(|item| item.object.pid == pid)
+            .map(|item| item.quantity as i64)
+            .sum();
+
+        if total_before == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("inventory item pid={pid} not found"),
+            ));
+        }
+
+        let target_total = match quantity {
+            None => 0i64,
+            Some(qty) => {
+                if qty <= 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("invalid inventory removal quantity {qty}, expected > 0"),
+                    ));
+                }
+                (total_before - qty as i64).max(0)
+            }
+        };
+
+        let mut reassigned = false;
+        self.save.player_object.inventory.retain_mut(|item| {
+            if item.object.pid != pid {
+                return true;
+            }
+            if reassigned {
+                return false;
+            }
+            if target_total <= 0 {
+                return false;
+            }
+
+            item.quantity = target_total as i32;
+            reassigned = true;
+            true
+        });
+
+        self.rewrite_handler5_from_player_object()
+    }
+
     fn patch_base_stat_handler(
         &mut self,
         stat_index: usize,
@@ -425,8 +619,18 @@ impl Document {
     }
 
     fn section_blob_mut(&mut self, id: SectionId) -> io::Result<&mut SectionBlob> {
-        let section_index = self
-            .layout
+        let section_index = self.section_index(id)?;
+
+        self.section_blobs.get_mut(section_index).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "section blob list does not match recorded layout",
+            )
+        })
+    }
+
+    fn section_index(&self, id: SectionId) -> io::Result<usize> {
+        self.layout
             .sections
             .iter()
             .position(|section| section.id == id)
@@ -435,14 +639,110 @@ impl Document {
                     io::ErrorKind::InvalidData,
                     format!("missing section {id:?}"),
                 )
-            })?;
+            })
+    }
 
-        self.section_blobs.get_mut(section_index).ok_or_else(|| {
+    fn patch_trait_slot(&mut self, slot: usize, value: i32) -> io::Result<()> {
+        let offset = slot * I32_WIDTH;
+        let blob = self.section_blob_mut(SectionId::Handler(15))?;
+        patch_i32_in_blob(blob, offset, value, "handler 15", "trait")
+    }
+
+    fn rewrite_handler5_from_player_object(&mut self) -> io::Result<()> {
+        let mut blob = Vec::new();
+        self.save.player_object.emit_to_vec(&mut blob)?;
+        blob.extend_from_slice(&self.save.center_tile.to_be_bytes());
+        self.replace_section_blob(SectionId::Handler(5), blob)
+    }
+
+    fn replace_section_blob(&mut self, id: SectionId, bytes: Vec<u8>) -> io::Result<()> {
+        let section_index = self.section_index(id)?;
+        let section = self.layout.sections.get_mut(section_index).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "section blob list does not match recorded layout",
             )
-        })
+        })?;
+        let old_len = section.range.len();
+        let new_len = bytes.len();
+        section.range.end = section.range.start + new_len;
+
+        if new_len != old_len {
+            if new_len > old_len {
+                let delta = new_len - old_len;
+                for later in self.layout.sections.iter_mut().skip(section_index + 1) {
+                    later.range.start = later.range.start.checked_add(delta).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "section start overflow")
+                    })?;
+                    later.range.end = later.range.end.checked_add(delta).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "section end overflow")
+                    })?;
+                }
+                self.layout.file_len =
+                    self.layout.file_len.checked_add(delta).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "layout file_len overflow")
+                    })?;
+            } else {
+                let delta = old_len - new_len;
+                for later in self.layout.sections.iter_mut().skip(section_index + 1) {
+                    later.range.start = later.range.start.checked_sub(delta).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "section start underflow")
+                    })?;
+                    later.range.end = later.range.end.checked_sub(delta).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "section end underflow")
+                    })?;
+                }
+                self.layout.file_len =
+                    self.layout.file_len.checked_sub(delta).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "layout file_len underflow")
+                    })?;
+            }
+        }
+
+        let slot = self.section_blobs.get_mut(section_index).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "section blob list does not match recorded layout",
+            )
+        })?;
+        slot.bytes = bytes;
+
+        Ok(())
+    }
+
+    fn validate_modified_state(&self) -> io::Result<()> {
+        if self.layout.sections.len() != self.section_blobs.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "layout/blob section count mismatch: {} layout sections, {} blobs",
+                    self.layout.sections.len(),
+                    self.section_blobs.len()
+                ),
+            ));
+        }
+
+        for (idx, (section, blob)) in self
+            .layout
+            .sections
+            .iter()
+            .zip(self.section_blobs.iter())
+            .enumerate()
+        {
+            let expected = section.range.len();
+            let actual = blob.bytes.len();
+            if expected != actual {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "section/blob length mismatch at index {idx} ({:?}): layout={}, blob={}",
+                        section.id, expected, actual
+                    ),
+                ));
+            }
+        }
+
+        self.layout.validate()
     }
 }
 

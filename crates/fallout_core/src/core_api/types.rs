@@ -68,6 +68,17 @@ impl Capabilities {
             issues,
         }
     }
+
+    pub fn editable(mut issues: Vec<CapabilityIssue>) -> Self {
+        issues.retain(|issue| *issue != CapabilityIssue::EditingNotImplemented);
+
+        Self {
+            can_query: true,
+            can_plan_edits: true,
+            can_apply_edits: true,
+            issues,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
