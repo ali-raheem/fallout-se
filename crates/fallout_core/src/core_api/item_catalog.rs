@@ -288,7 +288,7 @@ fn find_items_lst_path(install_dir: &Path) -> Option<PathBuf> {
     .find_map(|parts| resolve_case_insensitive_path(install_dir, parts))
 }
 
-fn find_text_root(install_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn find_text_root(install_dir: &Path) -> Option<PathBuf> {
     [
         ["data", "text"].as_slice(),
         ["text"].as_slice(),
@@ -298,7 +298,7 @@ fn find_text_root(install_dir: &Path) -> Option<PathBuf> {
     .find_map(|parts| resolve_case_insensitive_path(install_dir, parts))
 }
 
-fn find_master_dat_path(install_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn find_master_dat_path(install_dir: &Path) -> Option<PathBuf> {
     let mut bases = vec![install_dir.to_path_buf()];
     if let Some(parent) = install_dir.parent() {
         bases.push(parent.to_path_buf());
@@ -360,7 +360,7 @@ fn load_pro_item_messages_from_archive(
     Ok((language, parse_msg_entries(&bytes)))
 }
 
-fn archive_language_from_key(key: &str) -> Option<String> {
+pub(crate) fn archive_language_from_key(key: &str) -> Option<String> {
     let parts = key.split('\\').collect::<Vec<_>>();
     for window in parts.windows(2) {
         if window[0].eq_ignore_ascii_case("text") {
@@ -379,7 +379,7 @@ struct F1DatEntry {
 }
 
 #[derive(Debug, Clone)]
-struct F1DatArchive {
+pub(crate) struct F1DatArchive {
     path: PathBuf,
     entries: BTreeMap<String, F1DatEntry>,
 }
@@ -393,19 +393,19 @@ struct F2DatEntry {
 }
 
 #[derive(Debug, Clone)]
-struct F2DatArchive {
+pub(crate) struct F2DatArchive {
     path: PathBuf,
     entries: BTreeMap<String, F2DatEntry>,
 }
 
 #[derive(Debug, Clone)]
-enum DatArchive {
+pub(crate) enum DatArchive {
     F1(F1DatArchive),
     F2(F2DatArchive),
 }
 
 impl DatArchive {
-    fn open(path: &Path) -> Result<Self, CoreError> {
+    pub(crate) fn open(path: &Path) -> Result<Self, CoreError> {
         if let Ok(archive) = F1DatArchive::open(path) {
             return Ok(Self::F1(archive));
         }
@@ -418,21 +418,21 @@ impl DatArchive {
         ))
     }
 
-    fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         match self {
             Self::F1(archive) => &archive.path,
             Self::F2(archive) => &archive.path,
         }
     }
 
-    fn read_file(&self, relative_path: &str) -> Result<Vec<u8>, CoreError> {
+    pub(crate) fn read_file(&self, relative_path: &str) -> Result<Vec<u8>, CoreError> {
         match self {
             Self::F1(archive) => archive.read_file(relative_path),
             Self::F2(archive) => archive.read_file(relative_path),
         }
     }
 
-    fn entry_names(&self) -> Vec<String> {
+    pub(crate) fn entry_names(&self) -> Vec<String> {
         match self {
             Self::F1(archive) => archive.entries.keys().cloned().collect(),
             Self::F2(archive) => archive.entries.keys().cloned().collect(),
@@ -894,7 +894,7 @@ fn pid_to_index(pid: i32) -> i32 {
     pid.wrapping_sub(1) & 0x00FF_FFFF
 }
 
-fn parse_msg_entries(raw: &[u8]) -> BTreeMap<i32, String> {
+pub(crate) fn parse_msg_entries(raw: &[u8]) -> BTreeMap<i32, String> {
     let mut out = BTreeMap::new();
     let mut cursor = 0usize;
 
@@ -945,7 +945,7 @@ fn next_braced_token(raw: &[u8], cursor: &mut usize) -> Option<String> {
     Some(token)
 }
 
-fn resolve_case_insensitive_path(base: &Path, parts: &[&str]) -> Option<PathBuf> {
+pub(crate) fn resolve_case_insensitive_path(base: &Path, parts: &[&str]) -> Option<PathBuf> {
     let mut current = base.to_path_buf();
     for part in parts {
         current = resolve_case_insensitive_component(&current, part)?;

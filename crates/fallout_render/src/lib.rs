@@ -168,13 +168,23 @@ pub fn render_classic_sheet_with_options(session: &Session, options: TextRenderO
     render_classic_sheet_with_inventory(session, options, None, None)
 }
 
+pub fn render_classic_sheet_with_inventory_and_traits(
+    session: &Session,
+    options: TextRenderOptions,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+    total_weight_lbs: Option<i32>,
+    traits: Option<&[TraitEntry]>,
+) -> String {
+    render_classic_sheet_impl(session, options, inventory, total_weight_lbs, traits)
+}
+
 pub fn render_classic_sheet_with_inventory(
     session: &Session,
     options: TextRenderOptions,
     inventory: Option<&[ResolvedInventoryEntry]>,
     total_weight_lbs: Option<i32>,
 ) -> String {
-    render_classic_sheet_impl(session, options, inventory, total_weight_lbs)
+    render_classic_sheet_impl(session, options, inventory, total_weight_lbs, None)
 }
 
 pub fn render_text_with_options(
@@ -183,7 +193,7 @@ pub fn render_text_with_options(
     options: TextRenderOptions,
 ) -> String {
     match style {
-        TextStyle::ClassicFallout => render_classic_sheet_impl(session, options, None, None),
+        TextStyle::ClassicFallout => render_classic_sheet_impl(session, options, None, None, None),
     }
 }
 
@@ -544,6 +554,7 @@ fn render_classic_sheet_impl(
     options: TextRenderOptions,
     resolved_inventory: Option<&[ResolvedInventoryEntry]>,
     total_weight_lbs: Option<i32>,
+    traits_override: Option<&[TraitEntry]>,
 ) -> String {
     let snapshot = session.snapshot();
 
@@ -721,7 +732,13 @@ fn render_classic_sheet_impl(
     writeln!(&mut out).expect("writing to String cannot fail");
     writeln!(&mut out).expect("writing to String cannot fail");
 
-    let traits = session.selected_traits();
+    let traits_buffer;
+    let traits = if let Some(traits) = traits_override {
+        traits
+    } else {
+        traits_buffer = session.selected_traits();
+        traits_buffer.as_slice()
+    };
     let perks = session.active_perks();
     let skills = session.skills();
     let tagged_skill_indices = session.tagged_skill_indices();

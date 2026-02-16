@@ -41,6 +41,14 @@ fn temp_output_path(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("{prefix}_{}_{}.dat", std::process::id(), nanos))
 }
 
+fn temp_install_dir(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("{prefix}_{}_{}", std::process::id(), nanos))
+}
+
 #[test]
 fn cli_prints_single_gender_field() {
     let path = fallout1_save_path(1);
@@ -87,6 +95,46 @@ fn cli_detects_fallout1_traits_for_clairey() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), "traits=Gifted, Finesse");
+}
+
+#[test]
+fn cli_uses_trait_msg_names_when_install_dir_is_provided() {
+    let save_path = fallout1_save_path(1);
+    let save_path = save_path.to_string_lossy().to_string();
+
+    let install_dir = temp_install_dir("fallout_se_trait_override");
+    let trait_msg_path = install_dir
+        .join("data")
+        .join("text")
+        .join("english")
+        .join("game")
+        .join("trait.msg");
+    std::fs::create_dir_all(
+        trait_msg_path
+            .parent()
+            .expect("trait.msg should include parent directories"),
+    )
+    .expect("failed to create trait.msg path");
+    std::fs::write(
+        &trait_msg_path,
+        "{104}{}{Finesse Override}\n{115}{}{Gifted Override}\n",
+    )
+    .expect("failed to write trait.msg");
+
+    let install_dir_s = install_dir.to_string_lossy().to_string();
+    let output = run_cli(&[
+        "--fallout1",
+        "--install-dir",
+        &install_dir_s,
+        "--traits",
+        &save_path,
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "traits=Gifted Override, Finesse Override");
+
+    let _ = std::fs::remove_dir_all(&install_dir);
 }
 
 #[test]

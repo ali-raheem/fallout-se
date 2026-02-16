@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use fallout_core::core_api::{
     Capabilities, CapabilityIssue, Engine, Game as CoreGame, ItemCatalog, ResolvedInventoryEntry,
-    Session, TraitEntry, detect_install_dir_from_save_path,
+    Session, TraitCatalog, TraitEntry, detect_install_dir_from_save_path,
 };
 use fallout_core::fallout1;
 use fallout_core::fallout2;
@@ -17,8 +17,8 @@ use fallout_core::gender::Gender;
 use fallout_core::layout::{FileLayout, SectionId};
 use fallout_render::{
     FieldSelection as RenderFieldSelection, JsonStyle, TextRenderOptions,
-    render_classic_sheet_with_inventory, render_json_full_with_inventory,
-    render_json_selected_with_inventory,
+    render_classic_sheet_with_inventory_and_traits, render_json_full_from_export_with_inventory,
+    render_json_selected_from_export_with_inventory,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -392,6 +392,7 @@ impl FieldSelection {
         &self,
         session: &Session,
         resolved_inventory: Option<&[ResolvedInventoryEntry]>,
+        resolved_traits: Option<&[TraitEntry]>,
     ) -> Vec<(&'static str, String)> {
         let snapshot = session.snapshot();
         let mut out = Vec::new();
@@ -450,7 +451,14 @@ impl FieldSelection {
             ));
         }
         if self.traits {
-            out.push(("traits", format_traits(&session.selected_traits())));
+            let traits_buffer;
+            let traits = if let Some(traits) = resolved_traits {
+                traits
+            } else {
+                traits_buffer = session.selected_traits();
+                traits_buffer.as_slice()
+            };
+            out.push(("traits", format_traits(traits)));
         }
         if self.hp {
             out.push((
@@ -843,6 +851,18 @@ fn main() {
         cli.output.is_none()
     };
 
+    let output_uses_traits = if cli.json {
+        if fields.is_field_mode() {
+            fields.traits
+        } else {
+            true
+        }
+    } else if fields.is_field_mode() {
+        fields.traits
+    } else {
+        cli.output.is_none()
+    };
+
     let mut resolved_inventory = None;
     let mut total_weight_lbs = None;
     if output_uses_inventory {
@@ -856,17 +876,31 @@ fn main() {
         }
     }
 
+    let mut resolved_traits = None;
+    if output_uses_traits {
+        let trait_catalog = load_trait_catalog(path, cli.install_dir.as_deref());
+        if let Ok(catalog) = trait_catalog {
+            resolved_traits = Some(session.selected_traits_resolved(Some(&catalog)));
+        } else {
+            resolved_traits = Some(session.selected_traits());
+        }
+    }
+
     if cli.json {
+        let mut export = session.export_character();
+        if let Some(traits) = resolved_traits.as_ref() {
+            export.traits = traits.clone();
+        }
         let json = if fields.is_field_mode() {
-            render_json_selected_with_inventory(
-                &session,
+            render_json_selected_from_export_with_inventory(
+                &export,
                 &fields.to_renderer(),
                 JsonStyle::CanonicalV1,
                 resolved_inventory.as_deref(),
             )
         } else {
-            render_json_full_with_inventory(
-                &session,
+            render_json_full_from_export_with_inventory(
+                &export,
                 JsonStyle::CanonicalV1,
                 resolved_inventory.as_deref(),
             )
@@ -879,7 +913,11 @@ fn main() {
     }
 
     if fields.is_field_mode() {
-        for (key, value) in fields.selected_pairs(&session, resolved_inventory.as_deref()) {
+        for (key, value) in fields.selected_pairs(
+            &session,
+            resolved_inventory.as_deref(),
+            resolved_traits.as_deref(),
+        ) {
             println!("{key}={value}");
         }
         return;
@@ -897,21 +935,23 @@ fn main() {
     if cli.verbose {
         print!(
             "{}",
-            render_classic_sheet_with_inventory(
+            render_classic_sheet_with_inventory_and_traits(
                 &session,
                 TextRenderOptions { verbose: true },
                 resolved_inventory.as_deref(),
                 total_weight_lbs,
+                resolved_traits.as_deref(),
             )
         );
     } else {
         print!(
             "{}",
-            render_classic_sheet_with_inventory(
+            render_classic_sheet_with_inventory_and_traits(
                 &session,
                 TextRenderOptions::default(),
                 resolved_inventory.as_deref(),
                 total_weight_lbs,
+                resolved_traits.as_deref(),
             )
         );
     }
@@ -1944,6 +1984,22 @@ fn load_item_catalog(
         )
     })?;
     ItemCatalog::load_from_install_dir(&install_dir).map_err(|e| e.to_string())
+}
+
+fn load_trait_catalog(
+    save_path: &Path,
+    install_dir_override: Option<&Path>,
+) -> Result<TraitCatalog, String> {
+    if let Some(install_dir) = install_dir_override {
+        return TraitCatalog::load_from_install_dir(install_dir).map_err(|e| e.to_string());
+    }
+    let install_dir = detect_install_dir_from_save_path(save_path).ok_or_else(|| {
+        format!(
+            "failed to auto-detect install dir from {}",
+            save_path.display()
+        )
+    })?;
+    TraitCatalog::load_from_install_dir(&install_dir).map_err(|e| e.to_string())
 }
 
 fn to_core_gender(gender: GenderArg) -> Gender {

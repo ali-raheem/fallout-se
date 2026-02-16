@@ -1,8 +1,9 @@
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use fallout_core::core_api::{CharacterExport, CoreErrorCode, Engine, Game};
+use fallout_core::core_api::{CharacterExport, CoreErrorCode, Engine, Game, TraitCatalog};
 use fallout_core::gender::Gender;
 use fallout_core::{fallout1, fallout2};
 
@@ -53,6 +54,19 @@ fn normalize_tagged_indices(tagged: &[i32], skill_count: usize) -> Vec<usize> {
         out.push(index);
     }
     out
+}
+
+fn temp_test_dir(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "fallout_se_{}_{}_{}",
+        prefix,
+        std::process::id(),
+        nanos
+    ))
 }
 
 #[test]
@@ -223,6 +237,46 @@ fn session_query_methods_match_fallout1_save_data() {
     assert!(kills.iter().any(|k| k.index == 7 && k.count == 128));
 
     assert_eq!(session.map_files(), save.map_files);
+}
+
+#[test]
+fn session_can_resolve_traits_from_install_dir_catalog() {
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    let install_dir = temp_test_dir("trait_catalog_override");
+    let trait_msg_path = install_dir
+        .join("data")
+        .join("text")
+        .join("english")
+        .join("game")
+        .join("trait.msg");
+    fs::create_dir_all(
+        trait_msg_path
+            .parent()
+            .expect("trait.msg should include parent directories"),
+    )
+    .expect("failed to create temp trait.msg directory");
+    fs::write(
+        &trait_msg_path,
+        "{104}{}{Finesse Override}\n{115}{}{Gifted Override}\n",
+    )
+    .expect("failed to write trait.msg fixture");
+
+    let catalog =
+        TraitCatalog::load_from_install_dir(&install_dir).expect("failed to load trait catalog");
+    let traits = session.selected_traits_resolved(Some(&catalog));
+    assert_eq!(traits.len(), 2);
+    assert_eq!(traits[0].index, 15);
+    assert_eq!(traits[0].name, "Gifted Override");
+    assert_eq!(traits[1].index, 4);
+    assert_eq!(traits[1].name, "Finesse Override");
+
+    let _ = fs::remove_dir_all(&install_dir);
 }
 
 #[test]

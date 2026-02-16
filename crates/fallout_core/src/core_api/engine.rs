@@ -7,7 +7,7 @@ use crate::fallout2;
 use crate::fallout2::types as f2_types;
 use crate::gender::Gender;
 
-use super::ItemCatalog;
+use super::{ItemCatalog, TraitCatalog};
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
     Capabilities, CapabilityIssue, CharacterExport, DateParts, Game, InventoryEntry,
@@ -320,23 +320,31 @@ impl Session {
         }
     }
 
-    pub fn selected_traits(&self) -> Vec<TraitEntry> {
+    pub fn selected_traits_resolved(&self, catalog: Option<&TraitCatalog>) -> Vec<TraitEntry> {
         let traits = match &self.document {
             LoadedDocument::Fallout1(doc) => doc.save.selected_traits,
             LoadedDocument::Fallout2(doc) => doc.save.selected_traits,
         };
-        let names = match &self.document {
+        let builtin_names = match &self.document {
             LoadedDocument::Fallout1(_) => &f1_types::TRAIT_NAMES[..],
             LoadedDocument::Fallout2(_) => &f2_types::TRAIT_NAMES[..],
         };
         traits
             .iter()
-            .filter(|&&v| v >= 0 && (v as usize) < names.len())
-            .map(|&v| TraitEntry {
-                index: v as usize,
-                name: names[v as usize].to_string(),
+            .filter_map(|&value| usize::try_from(value).ok())
+            .map(|index| {
+                let name = catalog
+                    .and_then(|catalog| catalog.get(index))
+                    .map(str::to_string)
+                    .or_else(|| builtin_names.get(index).copied().map(str::to_string))
+                    .unwrap_or_else(|| format!("Trait #{index}"));
+                TraitEntry { index, name }
             })
             .collect()
+    }
+
+    pub fn selected_traits(&self) -> Vec<TraitEntry> {
+        self.selected_traits_resolved(None)
     }
 
     pub fn all_kill_counts(&self) -> Vec<KillCountEntry> {
