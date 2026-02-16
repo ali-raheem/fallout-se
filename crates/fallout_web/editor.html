@@ -3,22 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <base data-trunk-public-url />
-    <title>Fallout Save Viewer</title>
-    <link data-trunk rel="rust" />
-    <script data-trunk src="index.js" type="module"></script>
-    <link data-trunk rel="copy-file" href="editor.html" />
-    <link data-trunk rel="copy-file" href="editor.js" />
+    <base href="./" />
+    <title>Fallout Save Editor</title>
+    <script src="editor.js" type="module"></script>
     <style>
       :root {
-        --bg-top: #0a1218;
-        --bg-bottom: #06131a;
-        --panel: #0f2230cc;
-        --panel-border: #2a586f;
-        --text: #d9f5ff;
-        --muted: #84a9b8;
-        --accent: #6ee7f5;
-        --ok: #6ddf9f;
+        --bg-top: #1a0f07;
+        --bg-bottom: #1e0f07;
+        --panel: #2d1a10d9;
+        --panel-border: #b06d2f;
+        --text: #ffe8d2;
+        --muted: #d8ab84;
+        --accent: #ff9f43;
+        --warn: #ffbe70;
+        --ok: #d1ff8f;
         --error: #ff857d;
       }
 
@@ -33,13 +31,13 @@
         font-family: "Iosevka Fixed", "JetBrains Mono", "Cascadia Mono", monospace;
         color: var(--text);
         background:
-          radial-gradient(circle at 15% 20%, #18435a66 0%, transparent 45%),
-          radial-gradient(circle at 85% 10%, #135a5a44 0%, transparent 40%),
+          radial-gradient(circle at 12% 14%, #8f4f1e55 0%, transparent 40%),
+          radial-gradient(circle at 84% 20%, #7a2d1455 0%, transparent 38%),
           linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
       }
 
       .frame {
-        max-width: 1024px;
+        max-width: 1120px;
         margin: 0 auto;
         border: 1px solid var(--panel-border);
         border-radius: 14px;
@@ -63,6 +61,16 @@
         margin: 0;
         color: var(--muted);
         line-height: 1.5;
+      }
+
+      .risk {
+        margin: 12px 0 0;
+        padding: 10px 12px;
+        border: 1px solid #ff9f4355;
+        border-radius: 8px;
+        color: var(--warn);
+        background: #2b140b88;
+        line-height: 1.45;
       }
 
       .meta {
@@ -89,10 +97,6 @@
         border-bottom-color: var(--accent);
       }
 
-      .meta a.primary-nav {
-        border-bottom-color: #6ee7f577;
-      }
-
       .toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -103,18 +107,18 @@
 
       .drop-zone {
         width: 100%;
-        border: 1px dashed #6ee7f577;
+        border: 1px dashed #ff9f4388;
         border-radius: 10px;
         padding: 20px;
         text-align: center;
-        background: #08161f88;
+        background: #27150c88;
         color: var(--muted);
         transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
       }
 
       .drop-zone.active {
         border-color: var(--accent);
-        background: #0b243088;
+        background: #3a1d0d88;
         color: var(--text);
         transform: translateY(-1px);
       }
@@ -126,8 +130,8 @@
       }
 
       button {
-        border: 1px solid #4a7a8f;
-        background: #103245;
+        border: 1px solid #c17739;
+        background: #4d2612;
         color: var(--text);
         border-radius: 8px;
         padding: 8px 12px;
@@ -144,11 +148,27 @@
         cursor: not-allowed;
       }
 
-      .toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+      .editor-wrap {
+        border-top: 1px solid var(--panel-border);
+        padding: 16px 24px 24px;
+      }
+
+      .editor-label {
+        margin: 0 0 10px;
         color: var(--muted);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 360px;
+        border: 1px solid #cc854899;
+        border-radius: 10px;
+        padding: 14px;
+        font: inherit;
+        line-height: 1.35;
+        color: var(--text);
+        background: #1c0f09cc;
+        resize: vertical;
       }
 
       .status {
@@ -166,34 +186,19 @@
         color: var(--error);
       }
 
-      .output-wrap {
-        border-top: 1px solid var(--panel-border);
-        padding: 18px 0 0;
-      }
-
-      pre {
-        margin: 0;
-        padding: 0 24px 24px;
-        overflow: auto;
-        white-space: pre;
-        line-height: 1.24;
-        font-size: 14px;
-        color: #e3f8ff;
-      }
-
       @media (max-width: 640px) {
         body {
           padding: 14px;
         }
 
         .toolbar,
-        .header {
+        .header,
+        .editor-wrap {
           padding-left: 16px;
           padding-right: 16px;
         }
 
-        .status,
-        pre {
+        .status {
           padding-left: 16px;
           padding-right: 16px;
         }
@@ -201,21 +206,26 @@
         h1 {
           font-size: 1.25rem;
         }
+
+        textarea {
+          min-height: 300px;
+        }
       }
     </style>
   </head>
   <body>
     <main class="frame">
       <header class="header">
-        <h1>Fallout 1 & 2 Save Viewer</h1>
+        <h1>Fallout 1 & 2 Save Editor</h1>
         <p class="sub">
-          Drop a <code>SAVE.DAT</code> to get a character sheet output.
-	  For example, <code>Fallout/DATA/SAVEGAME/SLOTXX/SAVE.DAT</code>.
-          Enable JSON output for machine-readable data.
+          Load <code>SAVE.DAT</code>, edit core JSON, apply changes, and download an updated save binary.
+        </p>
+        <p class="risk">
+          Risk warning: editing save data can corrupt files. Always keep backups before applying JSON edits.
         </p>
         <p class="meta">
           <span class="by">By Ali Raheem</span>
-          <a class="primary-nav" href="editor.html">Open Save Editor</a>
+          <a href="./index.html">Back to Save Viewer</a>
           <a href="https://github.com/ali-raheem/fallout-se" target="_blank" rel="noopener noreferrer">
             Project Repository
           </a>
@@ -225,7 +235,7 @@
         </p>
       </header>
 
-      <section class="toolbar" aria-label="upload controls">
+      <section class="toolbar" aria-label="editor controls">
         <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Drop SAVE.DAT here">
           Drop <code>SAVE.DAT</code> here or click "Choose File".
         </div>
@@ -233,19 +243,18 @@
         <div class="actions">
           <input id="file-input" type="file" hidden />
           <button id="choose-file" type="button">Choose File</button>
-          <button id="copy-output" type="button" disabled>Copy Output</button>
-          <button id="download-output" type="button" disabled>Download</button>
-          <label class="toggle">
-            <input id="json-toggle" type="checkbox" />
-            JSON output
-          </label>
+          <button id="copy-json" type="button" disabled>Copy JSON</button>
+          <button id="format-json" type="button" disabled>Format JSON</button>
+          <button id="apply-json" type="button" disabled>Apply JSON + Build Save</button>
+          <button id="download-save" type="button" disabled>Download Edited SAVE.DAT</button>
         </div>
       </section>
 
       <p id="status" class="status" aria-live="polite"></p>
 
-      <section class="output-wrap" aria-label="rendered output">
-        <pre id="output" tabindex="0"></pre>
+      <section class="editor-wrap" aria-label="editable json">
+        <p class="editor-label">Editable CharacterExport JSON</p>
+        <textarea id="json-editor" spellcheck="false" autocomplete="off"></textarea>
       </section>
     </main>
   </body>

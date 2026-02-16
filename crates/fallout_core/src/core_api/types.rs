@@ -8,6 +8,7 @@ pub enum Game {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DateParts {
     pub day: i16,
     pub month: i16,
@@ -37,12 +38,14 @@ pub struct Snapshot {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InventoryEntry {
     pub quantity: i32,
     pub pid: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ItemCatalogEntry {
     pub pid: i32,
     pub name: String,
@@ -51,6 +54,7 @@ pub struct ItemCatalogEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolvedInventoryEntry {
     pub quantity: i32,
     pub pid: i32,
@@ -66,6 +70,7 @@ pub enum CapabilityIssue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Capabilities {
     pub can_query: bool,
     pub can_plan_edits: bool,
@@ -100,6 +105,7 @@ impl Capabilities {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StatEntry {
     pub index: usize,
     pub name: String,
@@ -109,6 +115,7 @@ pub struct StatEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SkillEntry {
     pub index: usize,
     pub name: String,
@@ -119,6 +126,7 @@ pub struct SkillEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PerkEntry {
     pub index: usize,
     pub name: String,
@@ -126,6 +134,7 @@ pub struct PerkEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct KillCountEntry {
     pub index: usize,
     pub name: String,
@@ -133,12 +142,14 @@ pub struct KillCountEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TraitEntry {
     pub index: usize,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CharacterExport {
     pub game: Game,
     pub description: String,
