@@ -280,16 +280,40 @@ function wireControls() {
 }
 
 async function initWasm() {
-  const base = baseHref();
-  const jsUrl = new URL(`${WASM_BUNDLE_BASENAME}.js`, base).toString();
-  const wasmUrl = new URL(`${WASM_BUNDLE_BASENAME}_bg.wasm`, base).toString();
+  async function loadWasmModule(forceFresh) {
+    const base = baseHref();
+    const cacheSuffix = forceFresh ? `?v=${Date.now()}` : "";
+    const jsUrl = new URL(`${WASM_BUNDLE_BASENAME}.js${cacheSuffix}`, base).toString();
+    const wasmUrl = new URL(`${WASM_BUNDLE_BASENAME}_bg.wasm${cacheSuffix}`, base).toString();
 
-  const mod = await import(jsUrl);
-  if (typeof mod.default !== "function") {
-    throw new Error(`WASM bundle missing default init(): ${jsUrl}`);
+    const mod = await import(jsUrl);
+    if (typeof mod.default !== "function") {
+      throw new Error(`WASM bundle missing default init(): ${jsUrl}`);
+    }
+    await mod.default({ module_or_path: wasmUrl });
+    return mod;
   }
 
-  await mod.default({ module_or_path: wasmUrl });
+  function hasEditorBindings(bindings) {
+    return (
+      bindings &&
+      typeof bindings.export_save_json === "function" &&
+      typeof bindings.apply_json_to_save === "function"
+    );
+  }
+
+  let mod = await loadWasmModule(false);
+  if (!hasEditorBindings(mod)) {
+    // Retry with cache-busting query params so stale wasm/js bundles are not reused.
+    mod = await loadWasmModule(true);
+  }
+
+  if (!hasEditorBindings(mod)) {
+    throw new Error(
+      "Loaded WASM module does not expose editor APIs (export_save_json/apply_json_to_save). Hard refresh the page to clear stale assets.",
+    );
+  }
+
   wasmBindings = mod;
   state.ready = true;
 }

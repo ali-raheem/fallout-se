@@ -34,15 +34,16 @@ function resetOutput() {
   elements.output.textContent = "";
   elements.copyOutput.disabled = true;
   elements.downloadOutput.disabled = true;
-  elements.downloadOutput.textContent = "Download .txt";
+  elements.downloadOutput.textContent = "Download";
 }
 
 function setRenderedOutput(text, filenameBase, extension = "txt") {
+	// Update to allow binary download otherwise plain so far
   state.renderedText = text;
   const normalizedExtension = extension === "json" ? "json" : "txt";
   state.outputFilename = `${filenameBase}_sheet.${normalizedExtension}`;
   elements.downloadOutput.textContent =
-    normalizedExtension === "json" ? "Download .json" : "Download .txt";
+    normalizedExtension === "json" ? "Download" : "Download";
   elements.output.textContent = text;
   elements.copyOutput.disabled = false;
   elements.downloadOutput.disabled = false;
