@@ -56,23 +56,26 @@ fn parse_slot01_stats() {
 fn parse_slot01_skills() {
     let save = load_slot(1);
 
-    // Tagged skills: Speech(14), Lockpick(9), Energy Weapons(2), Big Guns(1)
+    // Tagged skills: Small Guns(0), Speech(14), Lockpick(9), Energy Weapons(2)
     let tagged = &save.tagged_skills;
+    assert!(tagged.contains(&0)); // Small Guns
     assert!(tagged.contains(&14)); // Speech
     assert!(tagged.contains(&9)); // Lockpick
     assert!(tagged.contains(&2)); // Energy Weapons
-    assert!(tagged.contains(&1)); // Big Guns
 }
 
 #[test]
 fn parse_slot01_perks() {
     let save = load_slot(1);
 
-    // Active perks: Bonus HtH Damage(2), Bonus Move(3), Bonus Ranged Damage(4), Faster Healing(7)
-    assert_eq!(save.perks[2], 2); // Bonus HtH Damage rank 2
+    // Active perks: Awareness(0), Bonus Move(3), Bonus Ranged Damage(4),
+    // Bonus Rate of Fire(5), More Criticals(8), Action Boy(26)
+    assert_eq!(save.perks[0], 1); // Awareness rank 1
     assert_eq!(save.perks[3], 2); // Bonus Move rank 2
-    assert_eq!(save.perks[4], 1); // Bonus Ranged Damage rank 1
-    assert_eq!(save.perks[7], 2); // Faster Healing rank 2
+    assert_eq!(save.perks[4], 2); // Bonus Ranged Damage rank 2
+    assert_eq!(save.perks[5], 1); // Bonus Rate of Fire rank 1
+    assert_eq!(save.perks[8], 2); // More Criticals rank 2
+    assert_eq!(save.perks[26], 1); // Action Boy rank 1
 }
 
 #[test]

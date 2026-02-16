@@ -18,6 +18,15 @@ use sections::{
 };
 use types::{KILL_TYPE_COUNT, PERK_COUNT, SAVEABLE_STAT_COUNT, SKILL_COUNT, TAGGED_SKILL_COUNT};
 
+const STAT_STRENGTH: usize = 0;
+const STAT_PERCEPTION: usize = 1;
+const STAT_ENDURANCE: usize = 2;
+const STAT_CHARISMA: usize = 3;
+const STAT_INTELLIGENCE: usize = 4;
+const STAT_AGILITY: usize = 5;
+const STAT_LUCK: usize = 6;
+const STAT_INVALID: i32 = -1;
+
 const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
 const CRITTER_PROTO_BASE_STATS_OFFSET: usize = 8;
@@ -38,6 +47,69 @@ const PC_STATS_REPUTATION_OFFSET: usize = I32_WIDTH * 3;
 const PC_STATS_KARMA_OFFSET: usize = I32_WIDTH * 4;
 const PLAYER_HP_OFFSET_IN_HANDLER5: usize = 116;
 
+// Skill indices
+const SKILL_SMALL_GUNS: usize = 0;
+const SKILL_BIG_GUNS: usize = 1;
+const SKILL_ENERGY_WEAPONS: usize = 2;
+const SKILL_UNARMED: usize = 3;
+const SKILL_MELEE_WEAPONS: usize = 4;
+const SKILL_THROWING: usize = 5;
+const SKILL_FIRST_AID: usize = 6;
+const SKILL_DOCTOR: usize = 7;
+const SKILL_SNEAK: usize = 8;
+const SKILL_LOCKPICK: usize = 9;
+const SKILL_STEAL: usize = 10;
+const SKILL_TRAPS: usize = 11;
+const SKILL_SCIENCE: usize = 12;
+const SKILL_REPAIR: usize = 13;
+const SKILL_SPEECH: usize = 14;
+const SKILL_BARTER: usize = 15;
+
+// Trait indices
+const TRAIT_GOOD_NATURED: i32 = 10;
+const TRAIT_SKILLED: i32 = 14;
+const TRAIT_GIFTED: i32 = 15;
+
+// Perk indices
+const PERK_MR_FIXIT: usize = 31;
+const PERK_MEDIC: usize = 32;
+const PERK_MASTER_THIEF: usize = 33;
+const PERK_SPEAKER: usize = 34;
+const PERK_GHOST: usize = 38;
+const PERK_TAG: usize = 51;
+
+#[derive(Copy, Clone)]
+struct SkillFormula {
+    default_value: i32,
+    stat_modifier: i32,
+    stat1: usize,
+    stat2: i32,
+    points_modifier: i32,
+}
+
+// From fallout1-ce skill.cc skill_data[]. F1 uses (stat1+stat2)*mod/2 when stat2 is valid.
+#[rustfmt::skip]
+const SKILL_FORMULAS: [SkillFormula; SKILL_COUNT] = [
+    SkillFormula { default_value: 35, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_INVALID,                    points_modifier: 1 }, // Small Guns
+    SkillFormula { default_value: 10, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_INVALID,                    points_modifier: 1 }, // Big Guns
+    SkillFormula { default_value: 10, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_INVALID,                    points_modifier: 1 }, // Energy Weapons
+    SkillFormula { default_value: 65, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_STRENGTH as i32,            points_modifier: 1 }, // Unarmed
+    SkillFormula { default_value: 55, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_STRENGTH as i32,            points_modifier: 1 }, // Melee Weapons
+    SkillFormula { default_value: 40, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_INVALID,                    points_modifier: 1 }, // Throwing
+    SkillFormula { default_value: 30, stat_modifier: 1, stat1: STAT_PERCEPTION,   stat2: STAT_INTELLIGENCE as i32,        points_modifier: 1 }, // First Aid
+    SkillFormula { default_value: 15, stat_modifier: 1, stat1: STAT_PERCEPTION,   stat2: STAT_INTELLIGENCE as i32,        points_modifier: 1 }, // Doctor
+    SkillFormula { default_value: 25, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_INVALID,                    points_modifier: 1 }, // Sneak
+    SkillFormula { default_value: 20, stat_modifier: 1, stat1: STAT_PERCEPTION,   stat2: STAT_AGILITY as i32,             points_modifier: 1 }, // Lockpick
+    SkillFormula { default_value: 20, stat_modifier: 1, stat1: STAT_AGILITY,      stat2: STAT_INVALID,                    points_modifier: 1 }, // Steal
+    SkillFormula { default_value: 20, stat_modifier: 1, stat1: STAT_PERCEPTION,   stat2: STAT_AGILITY as i32,             points_modifier: 1 }, // Traps
+    SkillFormula { default_value: 25, stat_modifier: 2, stat1: STAT_INTELLIGENCE, stat2: STAT_INVALID,                    points_modifier: 1 }, // Science
+    SkillFormula { default_value: 20, stat_modifier: 1, stat1: STAT_INTELLIGENCE, stat2: STAT_INVALID,                    points_modifier: 1 }, // Repair
+    SkillFormula { default_value: 25, stat_modifier: 2, stat1: STAT_CHARISMA,     stat2: STAT_INVALID,                    points_modifier: 1 }, // Speech
+    SkillFormula { default_value: 20, stat_modifier: 2, stat1: STAT_CHARISMA,     stat2: STAT_INVALID,                    points_modifier: 1 }, // Barter
+    SkillFormula { default_value: 20, stat_modifier: 3, stat1: STAT_LUCK,         stat2: STAT_INVALID,                    points_modifier: 1 }, // Gambling
+    SkillFormula { default_value:  5, stat_modifier: 1, stat1: STAT_ENDURANCE,    stat2: STAT_INTELLIGENCE as i32,        points_modifier: 1 }, // Outdoorsman
+];
+
 #[derive(Debug)]
 pub struct SaveGame {
     pub header: SaveHeader,
@@ -54,6 +126,123 @@ pub struct SaveGame {
     pub combat_state: CombatState,
     pub pc_stats: PcStats,
     pub selected_traits: [i32; 2],
+}
+
+impl SaveGame {
+    /// Compute the effective (displayed) skill value, matching fallout1-ce skill_level().
+    pub fn effective_skill_value(&self, skill_index: usize) -> i32 {
+        if skill_index >= SKILL_COUNT {
+            return 0;
+        }
+
+        let formula = SKILL_FORMULAS[skill_index];
+        let points = self.critter_data.skills[skill_index];
+
+        // Stat bonus: F1 uses (stat1+stat2)*mod/2 when two stats are involved
+        let stat_bonus = if formula.stat2 != STAT_INVALID {
+            (self.total_stat(formula.stat1) + self.total_stat(formula.stat2 as usize))
+                * formula.stat_modifier
+                / 2
+        } else {
+            self.total_stat(formula.stat1) * formula.stat_modifier
+        };
+
+        let mut value = formula.default_value + stat_bonus + points * formula.points_modifier;
+
+        // Tagged skills get +20 and double the points contribution
+        if self.is_skill_tagged(skill_index) {
+            value += 20 + points * formula.points_modifier;
+
+            // If the Tag! perk granted the 4th tag slot, that tag doesn't get the +20
+            let has_tag_perk = self.has_perk_rank(PERK_TAG);
+            if has_tag_perk && skill_index as i32 == self.tagged_skills[3] {
+                value -= 20;
+            }
+        }
+
+        value += self.trait_skill_modifier(skill_index);
+        value += self.perk_skill_modifier(skill_index);
+
+        value.min(200)
+    }
+
+    fn total_stat(&self, stat_index: usize) -> i32 {
+        self.critter_data.base_stats[stat_index] + self.critter_data.bonus_stats[stat_index]
+    }
+
+    fn is_skill_tagged(&self, skill_index: usize) -> bool {
+        self.tagged_skills
+            .iter()
+            .any(|&s| s >= 0 && s as usize == skill_index)
+    }
+
+    fn has_perk_rank(&self, perk_index: usize) -> bool {
+        self.perks.get(perk_index).copied().unwrap_or(0) > 0
+    }
+
+    fn has_trait(&self, trait_index: i32) -> bool {
+        self.selected_traits.contains(&trait_index)
+    }
+
+    fn trait_skill_modifier(&self, skill_index: usize) -> i32 {
+        let mut modifier = 0;
+
+        if self.has_trait(TRAIT_GIFTED) {
+            modifier -= 10;
+        }
+
+        if self.has_trait(TRAIT_SKILLED) {
+            modifier += 10;
+        }
+
+        if self.has_trait(TRAIT_GOOD_NATURED) {
+            match skill_index {
+                SKILL_SMALL_GUNS | SKILL_BIG_GUNS | SKILL_ENERGY_WEAPONS | SKILL_UNARMED
+                | SKILL_MELEE_WEAPONS | SKILL_THROWING => modifier -= 10,
+                SKILL_FIRST_AID | SKILL_DOCTOR | SKILL_SPEECH | SKILL_BARTER => modifier += 15,
+                _ => {}
+            }
+        }
+
+        modifier
+    }
+
+    fn perk_skill_modifier(&self, skill_index: usize) -> i32 {
+        let mut modifier = 0;
+
+        match skill_index {
+            SKILL_FIRST_AID | SKILL_DOCTOR => {
+                if self.has_perk_rank(PERK_MEDIC) {
+                    modifier += 20;
+                }
+            }
+            SKILL_SNEAK => {
+                // Ghost perk depends on light level at runtime; skip it for save files.
+                let _ = self.has_perk_rank(PERK_GHOST);
+                if self.has_perk_rank(PERK_MASTER_THIEF) {
+                    modifier += 10;
+                }
+            }
+            SKILL_LOCKPICK | SKILL_STEAL | SKILL_TRAPS => {
+                if self.has_perk_rank(PERK_MASTER_THIEF) {
+                    modifier += 10;
+                }
+            }
+            SKILL_SCIENCE | SKILL_REPAIR => {
+                if self.has_perk_rank(PERK_MR_FIXIT) {
+                    modifier += 20;
+                }
+            }
+            SKILL_SPEECH | SKILL_BARTER => {
+                if self.has_perk_rank(PERK_SPEAKER) {
+                    modifier += 20;
+                }
+            }
+            _ => {}
+        }
+
+        modifier
+    }
 }
 
 #[derive(Debug)]

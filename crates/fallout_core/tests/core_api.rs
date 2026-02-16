@@ -165,15 +165,18 @@ fn session_query_methods_match_fallout1_save_data() {
             .tagged_skills
             .iter()
             .any(|&s| s >= 0 && s as usize == skill.index);
-        assert_eq!(skill.value, save.critter_data.skills[skill.index]);
+        assert_eq!(skill.value, save.effective_skill_value(skill.index));
         assert_eq!(skill.tagged, tagged);
     }
+    // Small Guns is tagged: 35 + 8*1 + 32 + 20 + 32 = 127
+    assert!(skills[0].tagged);
+    assert_eq!(skills[0].value, 127);
 
     let perks = session.active_perks();
     let expected_perks = save.perks.iter().filter(|&&rank| rank > 0).count();
     assert_eq!(perks.len(), expected_perks);
-    assert!(perks.iter().any(|p| p.index == 2 && p.rank == 2));
-    assert!(perks.iter().any(|p| p.index == 7 && p.rank == 2));
+    assert!(perks.iter().any(|p| p.index == 0 && p.rank == 1)); // Awareness
+    assert!(perks.iter().any(|p| p.index == 8 && p.rank == 2)); // More Criticals
 
     let kills = session.nonzero_kill_counts();
     let expected_kills = save.kill_counts.iter().filter(|&&count| count > 0).count();

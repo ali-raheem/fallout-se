@@ -5,8 +5,8 @@ pub const HEADER_PADDING: usize = 128;
 
 pub const SAVEABLE_STAT_COUNT: usize = 35;
 pub const SKILL_COUNT: usize = 18;
-pub const PERK_COUNT: usize = 63;
-pub const KILL_TYPE_COUNT: usize = 16;
+pub const PERK_COUNT: usize = 64;
+pub const KILL_TYPE_COUNT: usize = 15;
 pub const PC_STAT_COUNT: usize = 5;
 pub const TAGGED_SKILL_COUNT: usize = 4;
 
@@ -152,6 +152,7 @@ pub const PERK_NAMES: [&str; PERK_COUNT] = [
     "Weapon Penetrate",
     "Weapon Knockback",
     "Powered Armor",
+    "Combat Armor",
 ];
 
 pub const TRAIT_NAMES: [&str; 16] = [
@@ -189,5 +190,4 @@ pub const KILL_TYPE_NAMES: [&str; KILL_TYPE_COUNT] = [
     "Mantis",
     "Deathclaw",
     "Plant",
-    "(Unused)",
 ];

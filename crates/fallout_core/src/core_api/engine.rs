@@ -147,7 +147,7 @@ impl Session {
                     out.push(SkillEntry {
                         index,
                         name: (*name).to_string(),
-                        value: save.critter_data.skills[index],
+                        value: save.effective_skill_value(index),
                         tagged,
                     });
                 }
