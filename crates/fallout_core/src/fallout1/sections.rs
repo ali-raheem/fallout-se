@@ -272,20 +272,26 @@ pub fn skip_event_queue<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Resul
         let event_type = r.read_i32()?;
         let _object_id = r.read_i32()?;
 
-        // Type-specific data sizes
+        // Fallout 1 queue payload sizes from fallout1-ce q_func readProc handlers.
         let extra_bytes: u64 = match event_type {
-            0 => 12, // Drug
+            0 => 24, // DrugEffectEvent: stats[3] + modifiers[3]
             1 => 0,  // Knockout
-            2 => 4,  // Withdrawal
-            3 => 8,  // Script
+            2 => 12, // WithdrawalEvent: field_0 + pid + perk
+            3 => 8,  // ScriptEvent: sid + fixedParam
             4 => 0,  // Game time
             5 => 0,  // Poison
-            6 => 0,  // Radiation
+            6 => 8,  // RadiationEvent: radiationLevel + isHealing
+            7 => 0,  // Flare
+            8 => 0,  // Explosion
+            9 => 0,  // Item trickle
+            10 => 0, // Sneak
+            11 => 0, // Explosion failure
+            12 => 0, // Map update event
             _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("unknown event type: {event_type}"),
-                ));
+                ))
             }
         };
         r.skip(extra_bytes)?;

@@ -196,18 +196,25 @@ fn session_query_methods_match_fallout1_save_data() {
         assert_eq!(skill.tag_bonus, save.skill_tag_bonus(skill.index));
         assert_eq!(skill.bonus, skill.total - skill.raw);
     }
-    // Small Guns is tagged: 35 + 8*1 + 32 + 20 + 32 = 127
+    // Small Guns is tagged with Gifted active: 35 + 8*1 + 32 + 20 + 22 = 117
     assert!(tagged_indices.contains(&0));
     assert_eq!(skills[0].raw, 32);
     assert_eq!(skills[0].tag_bonus, 52);
-    assert_eq!(skills[0].bonus, 95);
-    assert_eq!(skills[0].total, 127);
+    assert_eq!(skills[0].bonus, 85);
+    assert_eq!(skills[0].total, 117);
 
     let perks = session.active_perks();
     let expected_perks = save.perks.iter().filter(|&&rank| rank > 0).count();
     assert_eq!(perks.len(), expected_perks);
     assert!(perks.iter().any(|p| p.index == 0 && p.rank == 1)); // Awareness
     assert!(perks.iter().any(|p| p.index == 8 && p.rank == 2)); // More Criticals
+
+    let traits = session.selected_traits();
+    assert_eq!(traits.len(), 2);
+    assert_eq!(traits[0].index, 15);
+    assert_eq!(traits[0].name, "Gifted");
+    assert_eq!(traits[1].index, 4);
+    assert_eq!(traits[1].name, "Finesse");
 
     let kills = session.nonzero_kill_counts();
     let expected_kills = save.kill_counts.iter().filter(|&&count| count > 0).count();
@@ -270,6 +277,19 @@ fn session_query_methods_match_fallout2_save_data() {
     let perks = session.active_perks();
     let expected_perks = save.perks.iter().filter(|&&rank| rank > 0).count();
     assert_eq!(perks.len(), expected_perks);
+
+    let expected_traits: Vec<usize> = save
+        .selected_traits
+        .iter()
+        .copied()
+        .filter(|&value| value >= 0)
+        .map(|value| value as usize)
+        .collect();
+    let traits = session.selected_traits();
+    assert_eq!(
+        traits.iter().map(|trait_entry| trait_entry.index).collect::<Vec<_>>(),
+        expected_traits
+    );
 
     let kills = session.nonzero_kill_counts();
     let expected_kills = save.kill_counts.iter().filter(|&&count| count > 0).count();

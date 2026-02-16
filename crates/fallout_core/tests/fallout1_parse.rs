@@ -65,6 +65,14 @@ fn parse_slot01_skills() {
 }
 
 #[test]
+fn parse_slot01_traits() {
+    let save = load_slot(1);
+
+    // Gifted (15) + Finesse (4)
+    assert_eq!(save.selected_traits, [15, 4]);
+}
+
+#[test]
 fn parse_slot01_perks() {
     let save = load_slot(1);
 

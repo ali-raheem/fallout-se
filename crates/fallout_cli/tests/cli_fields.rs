@@ -79,6 +79,17 @@ fn cli_prints_age_field() {
 }
 
 #[test]
+fn cli_detects_fallout1_traits_for_clairey() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--fallout1", "--traits", &path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "traits=Gifted, Finesse");
+}
+
+#[test]
 fn cli_without_field_flags_keeps_verbose_dump() {
     let path = fallout1_save_path(1);
     let path = path.to_string_lossy().to_string();
@@ -99,6 +110,8 @@ fn cli_default_text_includes_detailed_sections() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("::: Traits :::"));
+    assert!(stdout.contains("Gifted"));
+    assert!(stdout.contains("Finesse"));
     assert!(stdout.contains("::: Perks :::"));
     assert!(stdout.contains("::: Karma :::"));
     assert!(stdout.contains("  Karma: "));
