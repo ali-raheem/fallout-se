@@ -14,6 +14,8 @@ use super::types::{
 };
 
 const STAT_AGE_INDEX: usize = 33;
+const STAT_GENDER_INDEX: usize = 34;
+const GAME_TIME_TICKS_PER_YEAR: u32 = 315_360_000;
 const INVENTORY_CAPS_PID: i32 = -1;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -116,22 +118,10 @@ impl Session {
     }
 
     pub fn derived_stats_nonzero(&self) -> Vec<StatEntry> {
-        match &self.document {
-            LoadedDocument::Fallout1(doc) => collect_stat_entries(
-                &f1_types::STAT_NAMES,
-                &doc.save.critter_data.base_stats,
-                &doc.save.critter_data.bonus_stats,
-                7..f1_types::STAT_NAMES.len(),
-                true,
-            ),
-            LoadedDocument::Fallout2(doc) => collect_stat_entries(
-                &f2_types::STAT_NAMES,
-                &doc.save.critter_data.base_stats,
-                &doc.save.critter_data.bonus_stats,
-                7..f2_types::STAT_NAMES.len(),
-                true,
-            ),
-        }
+        self.stats()
+            .into_iter()
+            .filter(|stat| !(stat.total == 0 && stat.bonus == 0))
+            .collect()
     }
 
     pub fn skills(&self) -> Vec<SkillEntry> {
@@ -140,15 +130,16 @@ impl Session {
                 let save = &doc.save;
                 let mut out = Vec::with_capacity(f1_types::SKILL_NAMES.len());
                 for (index, name) in f1_types::SKILL_NAMES.iter().enumerate() {
-                    let tagged = save
-                        .tagged_skills
-                        .iter()
-                        .any(|&s| s >= 0 && s as usize == index);
+                    let raw = save.critter_data.skills[index];
+                    let tag_bonus = save.skill_tag_bonus(index);
+                    let total = save.effective_skill_value(index);
                     out.push(SkillEntry {
                         index,
                         name: (*name).to_string(),
-                        value: save.effective_skill_value(index),
-                        tagged,
+                        raw,
+                        tag_bonus,
+                        bonus: total - raw,
+                        total,
                     });
                 }
                 out
@@ -157,18 +148,30 @@ impl Session {
                 let save = &doc.save;
                 let mut out = Vec::with_capacity(f2_types::SKILL_NAMES.len());
                 for (index, name) in f2_types::SKILL_NAMES.iter().enumerate() {
-                    let tagged = save
-                        .tagged_skills
-                        .iter()
-                        .any(|&s| s >= 0 && s as usize == index);
+                    let raw = save.critter_data.skills[index];
+                    let tag_bonus = save.skill_tag_bonus(index);
+                    let total = save.effective_skill_value(index);
                     out.push(SkillEntry {
                         index,
                         name: (*name).to_string(),
-                        value: save.effective_skill_value(index),
-                        tagged,
+                        raw,
+                        tag_bonus,
+                        bonus: total - raw,
+                        total,
                     });
                 }
                 out
+            }
+        }
+    }
+
+    pub fn tagged_skill_indices(&self) -> Vec<usize> {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => {
+                normalize_tagged_skill_indices(&doc.save.tagged_skills, f1_types::SKILL_NAMES.len())
+            }
+            LoadedDocument::Fallout2(doc) => {
+                normalize_tagged_skill_indices(&doc.save.tagged_skills, f2_types::SKILL_NAMES.len())
             }
         }
     }
@@ -301,10 +304,7 @@ impl Session {
     }
 
     pub fn age(&self) -> i32 {
-        match &self.document {
-            LoadedDocument::Fallout1(doc) => doc.save.critter_data.base_stats[STAT_AGE_INDEX],
-            LoadedDocument::Fallout2(doc) => doc.save.critter_data.base_stats[STAT_AGE_INDEX],
-        }
+        self.stat(STAT_AGE_INDEX).total
     }
 
     pub fn max_hp(&self) -> i32 {
@@ -326,7 +326,7 @@ impl Session {
                     name: f1_types::STAT_NAMES[index].to_string(),
                     base,
                     bonus,
-                    total: base + bonus,
+                    total: total_for_stat(index, base, bonus, self.snapshot.game_time),
                 }
             }
             LoadedDocument::Fallout2(doc) => {
@@ -337,29 +337,20 @@ impl Session {
                     name: f2_types::STAT_NAMES[index].to_string(),
                     base,
                     bonus,
-                    total: base + bonus,
+                    total: total_for_stat(index, base, bonus, self.snapshot.game_time),
                 }
             }
         }
     }
 
+    pub fn stats(&self) -> Vec<StatEntry> {
+        (7..STAT_GENDER_INDEX)
+            .map(|index| self.stat(index))
+            .collect()
+    }
+
     pub fn all_derived_stats(&self) -> Vec<StatEntry> {
-        match &self.document {
-            LoadedDocument::Fallout1(doc) => collect_stat_entries(
-                &f1_types::STAT_NAMES,
-                &doc.save.critter_data.base_stats,
-                &doc.save.critter_data.bonus_stats,
-                7..f1_types::STAT_NAMES.len(),
-                false,
-            ),
-            LoadedDocument::Fallout2(doc) => collect_stat_entries(
-                &f2_types::STAT_NAMES,
-                &doc.save.critter_data.base_stats,
-                &doc.save.critter_data.bonus_stats,
-                7..f2_types::STAT_NAMES.len(),
-                false,
-            ),
-        }
+        self.stats()
     }
 
     pub fn inventory(&self) -> Vec<InventoryEntry> {
@@ -839,6 +830,37 @@ fn collect_stat_entries(
             bonus,
             total,
         });
+    }
+    out
+}
+
+fn total_for_stat(index: usize, base: i32, bonus: i32, game_time: u32) -> i32 {
+    if index == STAT_AGE_INDEX {
+        return effective_age_total(base, bonus, game_time);
+    }
+
+    base + bonus
+}
+
+fn effective_age_total(base: i32, bonus: i32, game_time: u32) -> i32 {
+    base.saturating_add(bonus)
+        .saturating_add(elapsed_game_years(game_time))
+}
+
+fn elapsed_game_years(game_time: u32) -> i32 {
+    i32::try_from(game_time / GAME_TIME_TICKS_PER_YEAR).unwrap_or(i32::MAX)
+}
+
+fn normalize_tagged_skill_indices(tagged_skills: &[i32], skill_count: usize) -> Vec<usize> {
+    let mut out = Vec::new();
+    for raw in tagged_skills {
+        let Ok(index) = usize::try_from(*raw) else {
+            continue;
+        };
+        if index >= skill_count || out.contains(&index) {
+            continue;
+        }
+        out.push(index);
     }
     out
 }

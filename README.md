@@ -24,7 +24,7 @@ If you have a source to clean room, or otherwise license/copyright free PID name
 ### Working
 - Parse `SAVE.DAT` for Fallout 1 and Fallout 2 with auto-detection.
 - **Game-style character sheet** — default text output matches the Fallout in-game print screen and now includes gameplay detail sections (karma/reputation, skills, kills, inventory).
-- **Comprehensive JSON output** with `--json` — includes SPECIAL stats, derived stats, skills, perks, kill counts, inventory, game time, max HP, next level XP.
+- **Comprehensive JSON output** with `--json` — includes top-level scalar metadata plus array sections (`special`, `stats`, `traits`, `perks`, `skills`, `tagged_skills`, `kill_counts`, `inventory`). `stats` includes derived values like Max HP and Age. Skill entries include `index`, `raw`, `tag_bonus`, `bonus`, and `total` (no legacy `value` alias).
 - **Query individual fields** — `--name`, `--description`, `--gender`, `--age`, `--level`, `--xp`, `--karma`, `--reputation`, `--skill-points`, `--map`, `--game-date`, `--save-date`, `--hp`, `--max-hp`, `--next-level-xp`, `--game-time`, `--special`, `--derived-stats`, `--skills`, `--perks`, `--kills`, `--inventory`, `--traits`.
 - Optional inventory item metadata (name/base weight) loaded from game data files when available:
   - Auto-detect install root from the `SAVE.DAT` location when possible.

@@ -6,6 +6,8 @@ use fallout_core::core_api::{CoreErrorCode, Engine, Game};
 use fallout_core::gender::Gender;
 use fallout_core::{fallout1, fallout2};
 
+const GAME_TIME_TICKS_PER_YEAR: u32 = 315_360_000;
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -33,6 +35,24 @@ fn load_fallout2_save(slot: u32) -> fallout2::SaveGame {
     let file = File::open(&path).unwrap_or_else(|e| panic!("failed to open {:?}: {}", path, e));
     fallout2::SaveGame::parse(BufReader::new(file))
         .unwrap_or_else(|e| panic!("failed to parse {:?}: {}", path, e))
+}
+
+fn effective_age(base_age: i32, game_time: u32) -> i32 {
+    base_age + (game_time / GAME_TIME_TICKS_PER_YEAR) as i32
+}
+
+fn normalize_tagged_indices(tagged: &[i32], skill_count: usize) -> Vec<usize> {
+    let mut out = Vec::new();
+    for raw in tagged {
+        let Ok(index) = usize::try_from(*raw) else {
+            continue;
+        };
+        if index >= skill_count || out.contains(&index) {
+            continue;
+        }
+        out.push(index);
+    }
+    out
 }
 
 #[test]
@@ -147,30 +167,41 @@ fn session_query_methods_match_fallout1_save_data() {
     }
 
     let derived = session.derived_stats_nonzero();
-    let expected_derived = (7..save.critter_data.base_stats.len())
+    let expected_derived = (7..34)
         .filter(|&idx| {
             let base = save.critter_data.base_stats[idx];
             let bonus = save.critter_data.bonus_stats[idx];
-            !(base + bonus == 0 && bonus == 0)
+            let total = if idx == 33 {
+                effective_age(base + bonus, save.header.game_time)
+            } else {
+                base + bonus
+            };
+            !(total == 0 && bonus == 0)
         })
         .count();
     assert_eq!(derived.len(), expected_derived);
-    assert!(derived.iter().all(|stat| stat.index >= 7));
+    assert!(derived.iter().all(|stat| (7..34).contains(&stat.index)));
+    assert!(derived.iter().all(|stat| stat.name != "Gender"));
 
     let skills = session.skills();
     assert_eq!(skills.len(), save.critter_data.skills.len());
     assert_eq!(skills[0].name, "Small Guns");
+    let tagged_indices = session.tagged_skill_indices();
+    let expected_tagged =
+        normalize_tagged_indices(&save.tagged_skills, save.critter_data.skills.len());
+    assert_eq!(tagged_indices, expected_tagged);
     for skill in &skills {
-        let tagged = save
-            .tagged_skills
-            .iter()
-            .any(|&s| s >= 0 && s as usize == skill.index);
-        assert_eq!(skill.value, save.effective_skill_value(skill.index));
-        assert_eq!(skill.tagged, tagged);
+        assert_eq!(skill.raw, save.critter_data.skills[skill.index]);
+        assert_eq!(skill.total, save.effective_skill_value(skill.index));
+        assert_eq!(skill.tag_bonus, save.skill_tag_bonus(skill.index));
+        assert_eq!(skill.bonus, skill.total - skill.raw);
     }
     // Small Guns is tagged: 35 + 8*1 + 32 + 20 + 32 = 127
-    assert!(skills[0].tagged);
-    assert_eq!(skills[0].value, 127);
+    assert!(tagged_indices.contains(&0));
+    assert_eq!(skills[0].raw, 32);
+    assert_eq!(skills[0].tag_bonus, 52);
+    assert_eq!(skills[0].bonus, 95);
+    assert_eq!(skills[0].total, 127);
 
     let perks = session.active_perks();
     let expected_perks = save.perks.iter().filter(|&&rank| rank > 0).count();
@@ -205,30 +236,36 @@ fn session_query_methods_match_fallout2_save_data() {
     assert_eq!(special[0].total, 8);
 
     let derived = session.derived_stats_nonzero();
-    let expected_derived = (7..save.critter_data.base_stats.len())
+    let expected_derived = (7..34)
         .filter(|&idx| {
             let base = save.critter_data.base_stats[idx];
             let bonus = save.critter_data.bonus_stats[idx];
-            !(base + bonus == 0 && bonus == 0)
+            let total = if idx == 33 {
+                effective_age(base + bonus, save.header.game_time)
+            } else {
+                base + bonus
+            };
+            !(total == 0 && bonus == 0)
         })
         .count();
     assert_eq!(derived.len(), expected_derived);
-    assert!(derived.iter().all(|stat| stat.index >= 7));
+    assert!(derived.iter().all(|stat| (7..34).contains(&stat.index)));
+    assert!(derived.iter().all(|stat| stat.name != "Gender"));
 
     let skills = session.skills();
     assert_eq!(skills.len(), save.critter_data.skills.len());
     assert_eq!(skills[0].name, "Small Guns");
+    let tagged_indices = session.tagged_skill_indices();
+    let expected_tagged =
+        normalize_tagged_indices(&save.tagged_skills, save.critter_data.skills.len());
+    assert_eq!(tagged_indices, expected_tagged);
     for skill in &skills {
-        let tagged = save
-            .tagged_skills
-            .iter()
-            .any(|&s| s >= 0 && s as usize == skill.index);
-        assert_eq!(skill.value, save.effective_skill_value(skill.index));
-        assert_eq!(skill.tagged, tagged);
+        assert_eq!(skill.raw, save.critter_data.skills[skill.index]);
+        assert_eq!(skill.total, save.effective_skill_value(skill.index));
+        assert_eq!(skill.tag_bonus, save.skill_tag_bonus(skill.index));
+        assert_eq!(skill.bonus, skill.total - skill.raw);
     }
-    assert!(skills.iter().any(|s| s.index == 0 && s.tagged));
-    assert!(skills.iter().any(|s| s.index == 4 && s.tagged));
-    assert!(skills.iter().any(|s| s.index == 5 && s.tagged));
+    assert_eq!(tagged_indices, vec![0, 4, 5]);
 
     let perks = session.active_perks();
     let expected_perks = save.perks.iter().filter(|&&rank| rank > 0).count();
@@ -331,7 +368,8 @@ fn session_can_edit_age_level_and_xp_fallout1() {
         .set_karma(4_321)
         .expect("failed to set Fallout 1 karma");
 
-    assert_eq!(session.age(), 25);
+    let expected_age = effective_age(25, session.snapshot().game_time);
+    assert_eq!(session.age(), expected_age);
     assert_eq!(session.snapshot().level, 12);
     assert_eq!(session.snapshot().experience, 60_123);
     assert_eq!(session.snapshot().unspent_skill_points, 42);
@@ -351,7 +389,10 @@ fn session_can_edit_age_level_and_xp_fallout1() {
     let reparsed = engine
         .open_bytes(&modified, Some(Game::Fallout1))
         .expect("failed to parse modified Fallout 1 bytes");
-    assert_eq!(reparsed.age(), 25);
+    assert_eq!(
+        reparsed.age(),
+        effective_age(25, reparsed.snapshot().game_time)
+    );
     assert_eq!(reparsed.snapshot().level, 12);
     assert_eq!(reparsed.snapshot().experience, 60_123);
     assert_eq!(reparsed.snapshot().unspent_skill_points, 42);
@@ -383,7 +424,8 @@ fn session_can_edit_age_level_and_xp_fallout2() {
         .set_karma(250)
         .expect("failed to set Fallout 2 karma");
 
-    assert_eq!(session.age(), 21);
+    let expected_age = effective_age(21, session.snapshot().game_time);
+    assert_eq!(session.age(), expected_age);
     assert_eq!(session.snapshot().level, 5);
     assert_eq!(session.snapshot().experience, 4_321);
     assert_eq!(session.snapshot().unspent_skill_points, 9);
@@ -403,7 +445,10 @@ fn session_can_edit_age_level_and_xp_fallout2() {
     let reparsed = engine
         .open_bytes(&modified, Some(Game::Fallout2))
         .expect("failed to parse modified Fallout 2 bytes");
-    assert_eq!(reparsed.age(), 21);
+    assert_eq!(
+        reparsed.age(),
+        effective_age(21, reparsed.snapshot().game_time)
+    );
     assert_eq!(reparsed.snapshot().level, 5);
     assert_eq!(reparsed.snapshot().experience, 4_321);
     assert_eq!(reparsed.snapshot().unspent_skill_points, 9);

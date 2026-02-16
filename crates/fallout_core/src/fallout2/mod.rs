@@ -1047,6 +1047,24 @@ impl SaveGame {
         value
     }
 
+    /// Return only the contribution from tagging logic for one skill.
+    pub fn skill_tag_bonus(&self, skill_index: usize) -> i32 {
+        if skill_index >= SKILL_COUNT || !self.is_skill_tagged(skill_index) {
+            return 0;
+        }
+
+        let formula = SKILL_FORMULAS[skill_index];
+        let base_value = self.critter_data.skills[skill_index];
+        let mut bonus = base_value * formula.base_value_mult;
+
+        let has_tag_perk = self.has_perk_rank(PERK_TAG);
+        if !has_tag_perk || skill_index as i32 != self.tagged_skills[3] {
+            bonus += 20;
+        }
+
+        bonus
+    }
+
     fn total_stat(&self, stat_index: usize) -> i32 {
         self.critter_data.base_stats[stat_index] + self.critter_data.bonus_stats[stat_index]
     }

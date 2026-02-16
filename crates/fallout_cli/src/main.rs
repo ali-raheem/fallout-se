@@ -477,16 +477,21 @@ impl FieldSelection {
             }
         }
         if self.derived_stats {
-            let stats = session.all_derived_stats();
+            let stats = session.stats();
             for s in &stats {
-                out.push(("derived_stat", format!("{}={}", s.name, s.total)));
+                out.push(("stat", format!("{}={}", s.name, s.total)));
             }
         }
         if self.skills {
+            let tagged_skill_indices = session.tagged_skill_indices();
             let skills = session.skills();
             for s in &skills {
-                let tag = if s.tagged { " *" } else { "" };
-                out.push(("skill", format!("{}={}{}", s.name, s.value, tag)));
+                let tag = if tagged_skill_indices.contains(&s.index) {
+                    " *"
+                } else {
+                    ""
+                };
+                out.push(("skill", format!("{}={}{}", s.name, s.total, tag)));
             }
         }
         if self.perks {
@@ -1487,18 +1492,8 @@ fn debug_compare(args: DebugCompareArgs) -> Result<i32, String> {
     push_diff(
         &mut field_diffs,
         "tagged_skills",
-        session_a
-            .skills()
-            .iter()
-            .filter(|s| s.tagged)
-            .count()
-            .to_string(),
-        session_b
-            .skills()
-            .iter()
-            .filter(|s| s.tagged)
-            .count()
-            .to_string(),
+        session_a.tagged_skill_indices().len().to_string(),
+        session_b.tagged_skill_indices().len().to_string(),
     );
 
     let section_diffs = compare_sections(doc_a.layout(), doc_b.layout());

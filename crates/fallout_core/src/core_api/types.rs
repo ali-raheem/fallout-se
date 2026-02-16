@@ -111,8 +111,10 @@ pub struct StatEntry {
 pub struct SkillEntry {
     pub index: usize,
     pub name: String,
-    pub value: i32,
-    pub tagged: bool,
+    pub raw: i32,
+    pub tag_bonus: i32,
+    pub bonus: i32,
+    pub total: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

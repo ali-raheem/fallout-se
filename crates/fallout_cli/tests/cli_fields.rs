@@ -9,6 +9,8 @@ use fallout_core::fallout1::types as f1_types;
 use fallout_core::fallout2::SaveGame as Fallout2SaveGame;
 use serde_json::Value;
 
+const GAME_TIME_TICKS_PER_YEAR: u32 = 315_360_000;
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -246,6 +248,36 @@ fn cli_outputs_selected_fields_as_json() {
 }
 
 #[test]
+fn cli_outputs_age_under_stats_in_json_field_mode() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--json", "--age", &path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: Value = serde_json::from_str(&stdout).expect("stdout should be valid JSON");
+    assert!(json.get("age").is_none());
+    let stats = json["stats"].as_array().expect("stats should be an array");
+    assert_eq!(stats.len(), 1);
+    assert_eq!(stats[0]["name"], "Age");
+}
+
+#[test]
+fn cli_outputs_max_hp_under_stats_in_json_field_mode() {
+    let path = fallout1_save_path(1);
+    let path = path.to_string_lossy().to_string();
+    let output = run_cli(&["--json", "--max-hp", &path]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: Value = serde_json::from_str(&stdout).expect("stdout should be valid JSON");
+    assert!(json.get("max_hp").is_none());
+    let stats = json["stats"].as_array().expect("stats should be an array");
+    assert_eq!(stats.len(), 1);
+    assert_eq!(stats[0]["name"], "Max HP");
+}
+
+#[test]
 fn cli_outputs_default_summary_as_json() {
     let path = fallout1_save_path(1);
     let path = path.to_string_lossy().to_string();
@@ -260,6 +292,23 @@ fn cli_outputs_default_summary_as_json() {
     assert_eq!(json["level"], 13);
     assert_eq!(json["xp"], 80795);
     assert!(json.get("global_var_count").is_some());
+
+    let skills = json["skills"]
+        .as_array()
+        .expect("skills should be an array");
+    assert!(!skills.is_empty());
+    let first = &skills[0];
+    assert!(first.get("index").is_some());
+    assert!(first.get("raw").is_some());
+    assert!(first.get("tag_bonus").is_some());
+    assert!(first.get("bonus").is_some());
+    assert!(first.get("total").is_some());
+    assert!(first.get("value").is_none());
+    assert!(first.get("tagged").is_none());
+    assert!(json.get("age").is_none());
+    assert!(json.get("max_hp").is_none());
+    assert!(json.get("stats").is_some());
+    assert!(json.get("tagged_skills").is_some());
 }
 
 #[test]
@@ -287,7 +336,6 @@ fn cli_outputs_default_json_in_expected_order() {
             "save_date",
             "game_time",
             "name",
-            "age",
             "gender",
             "level",
             "xp",
@@ -297,15 +345,15 @@ fn cli_outputs_default_json_in_expected_order() {
             "map_id",
             "elevation",
             "global_var_count",
-            "special",
             "hp",
-            "max_hp",
-            "derived_stats",
-            "traits",
-            "perks",
             "karma",
             "reputation",
+            "special",
+            "stats",
+            "traits",
+            "perks",
             "skills",
+            "tagged_skills",
             "kill_counts",
             "inventory",
         ]
@@ -367,6 +415,11 @@ fn cli_can_set_gender_and_write_output_file() {
 #[test]
 fn cli_can_set_age_level_xp_and_write_output_file() {
     let path = fallout2_save_path(1);
+    let source = Fallout2SaveGame::parse(BufReader::new(
+        File::open(&path).expect("fixture should open"),
+    ))
+    .expect("fixture should parse");
+    let years = (source.header.game_time / GAME_TIME_TICKS_PER_YEAR) as i32;
     let path = path.to_string_lossy().to_string();
     let out_path = temp_output_path("fallout_se_set_age_level_xp");
     let out_path_s = out_path.to_string_lossy().to_string();
@@ -389,7 +442,11 @@ fn cli_can_set_age_level_xp_and_write_output_file() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines, vec!["age=21", "level=5", "xp=4321"]);
+    let expected_age_line = format!("age={}", 21 + years);
+    assert_eq!(
+        lines,
+        vec![expected_age_line.as_str(), "level=5", "xp=4321"]
+    );
 
     let file = File::open(&out_path).expect("expected output file to be created");
     let save = Fallout2SaveGame::parse(BufReader::new(file))

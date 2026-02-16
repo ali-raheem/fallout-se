@@ -46,7 +46,6 @@ fn full_json_uses_canonical_top_level_order() {
             "save_date",
             "game_time",
             "name",
-            "age",
             "gender",
             "level",
             "xp",
@@ -56,15 +55,15 @@ fn full_json_uses_canonical_top_level_order() {
             "map_id",
             "elevation",
             "global_var_count",
-            "special",
             "hp",
-            "max_hp",
-            "derived_stats",
-            "traits",
-            "perks",
             "karma",
             "reputation",
+            "special",
+            "stats",
+            "traits",
+            "perks",
             "skills",
+            "tagged_skills",
             "kill_counts",
             "inventory",
         ]
@@ -101,13 +100,58 @@ fn selected_json_uses_canonical_subset_order() {
             "name",
             "gender",
             "xp",
-            "special",
             "hp",
+            "special",
             "traits",
             "perks",
             "kill_counts",
         ]
     );
+}
+
+#[test]
+fn selected_json_age_is_emitted_in_stats_section() {
+    let session = session_from_path(fallout1_save_path(1));
+    let fields = FieldSelection {
+        age: true,
+        ..FieldSelection::default()
+    };
+    let value = render_json_selected(&session, &fields, JsonStyle::CanonicalV1);
+
+    let keys: Vec<&str> = value
+        .as_object()
+        .expect("json should be an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(keys, vec!["stats"]);
+
+    let stats = value["stats"].as_array().expect("stats should be an array");
+    assert_eq!(stats.len(), 1);
+    assert_eq!(stats[0]["name"], "Age");
+}
+
+#[test]
+fn selected_json_max_hp_is_emitted_in_stats_section() {
+    let session = session_from_path(fallout1_save_path(1));
+    let fields = FieldSelection {
+        max_hp: true,
+        ..FieldSelection::default()
+    };
+    let value = render_json_selected(&session, &fields, JsonStyle::CanonicalV1);
+
+    let keys: Vec<&str> = value
+        .as_object()
+        .expect("json should be an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(keys, vec!["stats"]);
+    assert!(value.get("max_hp").is_none());
+
+    let stats = value["stats"].as_array().expect("stats should be an array");
+    assert_eq!(stats.len(), 1);
+    assert_eq!(stats[0]["name"], "Max HP");
 }
 
 #[test]
@@ -214,4 +258,46 @@ fn classic_sheet_can_include_resolved_inventory_and_total_weight() {
     let carry_weight = session.stat(12).total;
     assert!(rendered.contains(&format!("Total Weight: 123/{carry_weight} lbs.")));
     assert!(rendered.contains("(2 lbs.)"));
+}
+
+#[test]
+fn full_json_skills_include_breakdown_fields() {
+    let session = session_from_path(fallout1_save_path(1));
+    let value = render_json_full(&session, JsonStyle::CanonicalV1);
+    assert!(value.get("age").is_none());
+    assert!(value.get("max_hp").is_none());
+    assert!(value.get("stats").is_some());
+
+    let stats = value["stats"].as_array().expect("stats should be an array");
+    assert!(stats.iter().any(|entry| entry["name"] == "Age"));
+    assert!(!stats.iter().any(|entry| entry["name"] == "Gender"));
+
+    let tagged = value["tagged_skills"]
+        .as_array()
+        .expect("tagged_skills should be an array");
+    let expected_tagged: Vec<Value> = session
+        .tagged_skill_indices()
+        .into_iter()
+        .map(Value::from)
+        .collect();
+    assert_eq!(tagged, expected_tagged.as_slice());
+
+    let skills = value["skills"]
+        .as_array()
+        .expect("skills should be an array");
+    assert!(!skills.is_empty());
+
+    let first = &skills[0];
+    assert!(first.get("index").is_some());
+    assert!(first.get("raw").is_some());
+    assert!(first.get("tag_bonus").is_some());
+    assert!(first.get("bonus").is_some());
+    assert!(first.get("total").is_some());
+    assert!(first.get("value").is_none());
+    assert!(first.get("tagged").is_none());
+
+    let raw = first["raw"].as_i64().expect("raw should be a number");
+    let bonus = first["bonus"].as_i64().expect("bonus should be a number");
+    let total = first["total"].as_i64().expect("total should be a number");
+    assert_eq!(raw + bonus, total);
 }

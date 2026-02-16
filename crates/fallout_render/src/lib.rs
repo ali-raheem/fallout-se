@@ -15,6 +15,8 @@ const INVENTORY_COL_WIDTH_A: usize = 25;
 const INVENTORY_COL_WIDTH_B: usize = 25;
 const INVENTORY_COL_WIDTH_C: usize = 23;
 const INVENTORY_CAPS_PID: i32 = 41;
+const STAT_MAX_HP_INDEX: usize = 7;
+const STAT_AGE_INDEX: usize = 33;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonStyle {
@@ -200,9 +202,6 @@ fn selected_json(
             JsonValue::String(snapshot.character_name.clone()),
         );
     }
-    if fields.age {
-        out.insert("age".to_string(), JsonValue::from(session.age()));
-    }
     if fields.gender {
         out.insert(
             "gender".to_string(),
@@ -236,9 +235,6 @@ fn selected_json(
     if fields.elevation {
         out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
     }
-    if fields.special {
-        out.insert("special".to_string(), special_to_json(session));
-    }
     if fields.hp {
         out.insert(
             "hp".to_string(),
@@ -247,21 +243,6 @@ fn selected_json(
                 None => JsonValue::Null,
             },
         );
-    }
-    if fields.max_hp {
-        out.insert("max_hp".to_string(), JsonValue::from(session.max_hp()));
-    }
-    if fields.derived_stats {
-        out.insert("derived_stats".to_string(), derived_stats_to_json(session));
-    }
-    if fields.traits {
-        out.insert(
-            "traits".to_string(),
-            traits_to_json(&session.selected_traits()),
-        );
-    }
-    if fields.perks {
-        out.insert("perks".to_string(), perks_to_json(session));
     }
     if fields.karma {
         out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
@@ -272,8 +253,29 @@ fn selected_json(
             JsonValue::from(snapshot.reputation),
         );
     }
+    if fields.special {
+        out.insert("special".to_string(), special_to_json(session));
+    }
+    if fields.derived_stats {
+        out.insert("stats".to_string(), stats_to_json(session));
+    } else if fields.max_hp || fields.age {
+        out.insert(
+            "stats".to_string(),
+            selected_stats_to_json(session, fields.max_hp, fields.age),
+        );
+    }
+    if fields.traits {
+        out.insert(
+            "traits".to_string(),
+            traits_to_json(&session.selected_traits()),
+        );
+    }
+    if fields.perks {
+        out.insert("perks".to_string(), perks_to_json(session));
+    }
     if fields.skills {
         out.insert("skills".to_string(), skills_to_json(session));
+        out.insert("tagged_skills".to_string(), tagged_skills_to_json(session));
     }
     if fields.kills {
         out.insert("kill_counts".to_string(), kill_counts_to_json(session));
@@ -330,7 +332,6 @@ fn default_json(
         "name".to_string(),
         JsonValue::String(snapshot.character_name.clone()),
     );
-    out.insert("age".to_string(), JsonValue::from(session.age()));
     out.insert(
         "gender".to_string(),
         JsonValue::String(snapshot.gender.to_string()),
@@ -355,8 +356,6 @@ fn default_json(
         "global_var_count".to_string(),
         JsonValue::from(snapshot.global_var_count),
     );
-
-    out.insert("special".to_string(), special_to_json(session));
     out.insert(
         "hp".to_string(),
         match session.current_hp() {
@@ -364,19 +363,21 @@ fn default_json(
             None => JsonValue::Null,
         },
     );
-    out.insert("max_hp".to_string(), JsonValue::from(session.max_hp()));
-    out.insert("derived_stats".to_string(), derived_stats_to_json(session));
-    out.insert(
-        "traits".to_string(),
-        traits_to_json(&session.selected_traits()),
-    );
-    out.insert("perks".to_string(), perks_to_json(session));
     out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
     out.insert(
         "reputation".to_string(),
         JsonValue::from(snapshot.reputation),
     );
+
+    out.insert("special".to_string(), special_to_json(session));
+    out.insert("stats".to_string(), stats_to_json(session));
+    out.insert(
+        "traits".to_string(),
+        traits_to_json(&session.selected_traits()),
+    );
+    out.insert("perks".to_string(), perks_to_json(session));
     out.insert("skills".to_string(), skills_to_json(session));
+    out.insert("tagged_skills".to_string(), tagged_skills_to_json(session));
     out.insert("kill_counts".to_string(), kill_counts_to_json(session));
     out.insert(
         "inventory".to_string(),
@@ -396,14 +397,19 @@ fn special_to_json(session: &Session) -> JsonValue {
     )
 }
 
-fn derived_stats_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .all_derived_stats()
-            .iter()
-            .map(stat_entry_to_json)
-            .collect(),
-    )
+fn stats_to_json(session: &Session) -> JsonValue {
+    JsonValue::Array(session.stats().iter().map(stat_entry_to_json).collect())
+}
+
+fn selected_stats_to_json(session: &Session, include_max_hp: bool, include_age: bool) -> JsonValue {
+    let mut selected = Vec::new();
+    if include_max_hp {
+        selected.push(session.stat(STAT_MAX_HP_INDEX));
+    }
+    if include_age {
+        selected.push(session.stat(STAT_AGE_INDEX));
+    }
+    JsonValue::Array(selected.iter().map(stat_entry_to_json).collect())
 }
 
 fn stat_entry_to_json(s: &StatEntry) -> JsonValue {
@@ -422,11 +428,24 @@ fn skills_to_json(session: &Session) -> JsonValue {
             .iter()
             .map(|s: &SkillEntry| {
                 let mut m = JsonMap::new();
+                m.insert("index".to_string(), JsonValue::from(s.index));
                 m.insert("name".to_string(), JsonValue::String(s.name.clone()));
-                m.insert("value".to_string(), JsonValue::from(s.value));
-                m.insert("tagged".to_string(), JsonValue::Bool(s.tagged));
+                m.insert("raw".to_string(), JsonValue::from(s.raw));
+                m.insert("tag_bonus".to_string(), JsonValue::from(s.tag_bonus));
+                m.insert("bonus".to_string(), JsonValue::from(s.bonus));
+                m.insert("total".to_string(), JsonValue::from(s.total));
                 JsonValue::Object(m)
             })
+            .collect(),
+    )
+}
+
+fn tagged_skills_to_json(session: &Session) -> JsonValue {
+    JsonValue::Array(
+        session
+            .tagged_skill_indices()
+            .into_iter()
+            .map(JsonValue::from)
             .collect(),
     )
 }
@@ -698,6 +717,7 @@ fn render_classic_sheet_impl(
     let traits = session.selected_traits();
     let perks = session.active_perks();
     let skills = session.skills();
+    let tagged_skill_indices = session.tagged_skill_indices();
     let kills = if options.verbose {
         session.all_kill_counts()
     } else {
@@ -713,7 +733,7 @@ fn render_classic_sheet_impl(
         snapshot.reputation,
     );
     writeln!(&mut out).expect("writing to String cannot fail");
-    write_skills_kills_grid(&mut out, &skills, &kills);
+    write_skills_kills_grid(&mut out, &skills, &tagged_skill_indices, &kills);
     writeln!(&mut out).expect("writing to String cannot fail");
     write_inventory_section(
         session,
@@ -785,7 +805,12 @@ fn write_traits_perks_karma_grid(
     }
 }
 
-fn write_skills_kills_grid(out: &mut String, skills: &[SkillEntry], kills: &[KillCountEntry]) {
+fn write_skills_kills_grid(
+    out: &mut String,
+    skills: &[SkillEntry],
+    tagged_skill_indices: &[usize],
+    kills: &[KillCountEntry],
+) {
     writeln!(out, " ::: Skills :::                ::: Kills :::")
         .expect("writing to String cannot fail");
 
@@ -795,10 +820,10 @@ fn write_skills_kills_grid(out: &mut String, skills: &[SkillEntry], kills: &[Kil
         skills
             .iter()
             .map(|entry| {
-                if entry.tagged {
-                    format!("{}: {} *", entry.name, entry.value)
+                if tagged_skill_indices.contains(&entry.index) {
+                    format!("{}: {} *", entry.name, entry.total)
                 } else {
-                    format!("{}: {}", entry.name, entry.value)
+                    format!("{}: {}", entry.name, entry.total)
                 }
             })
             .collect()
@@ -863,11 +888,7 @@ fn write_inventory_section(
             .filter(|entry| entry.pid != INVENTORY_CAPS_PID)
             .map(|entry| {
                 if let Some(name) = &entry.name {
-                    format!(
-                        "{}x {}",
-                        format_number_with_commas(entry.quantity),
-                        name,
-                    )
+                    format!("{}x {}", format_number_with_commas(entry.quantity), name,)
                 } else {
                     format!(
                         "{}x pid={:08X}",
