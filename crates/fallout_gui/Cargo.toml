@@ -8,4 +8,4 @@ license.workspace = true
 description = "Native GUI shell for Fallout save editor"
 
 [dependencies]
-fallout_core = { package = "fallout-se-core", version = "0.1.4", path = "../fallout_core" }
+fallout_core = { package = "fallout-se-core", version = "0.1.5", path = "../fallout_core" }
