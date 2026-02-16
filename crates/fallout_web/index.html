@@ -63,6 +63,30 @@
         line-height: 1.5;
       }
 
+      .meta {
+        margin: 12px 0 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .meta .by {
+        color: var(--text);
+      }
+
+      .meta a {
+        color: var(--accent);
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+      }
+
+      .meta a:hover {
+        border-bottom-color: var(--accent);
+      }
+
       .toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -179,8 +203,18 @@
       <header class="header">
         <h1>Fallout 1 & 2 Save Viewer</h1>
         <p class="sub">
-          Drop a <code>SAVE.DAT</code> to get a character sheet text.
+          Drop a <code>SAVE.DAT</code> to get a character sheet output.
 	  For example, <code>Fallout/DATA/SAVEGAME/SLOTXX/SAVE.DAT</code>.
+          Enable JSON output for machine-readable data.
+        </p>
+        <p class="meta">
+          <span class="by">By Ali Raheem</span>
+          <a href="https://github.com/ali-raheem/fallout-se" target="_blank" rel="noopener noreferrer">
+            Project Repository
+          </a>
+          <a href="https://github.com/ali-raheem/fallout-se/issues" target="_blank" rel="noopener noreferrer">
+            Report Issues
+          </a>
         </p>
       </header>
 
@@ -192,11 +226,11 @@
         <div class="actions">
           <input id="file-input" type="file" hidden />
           <button id="choose-file" type="button">Choose File</button>
-          <button id="copy-output" type="button" disabled>Copy Text</button>
-          <button id="download-output" type="button" disabled>Download .txt</button>
+          <button id="copy-output" type="button" disabled>Copy Output</button>
+          <button id="download-output" type="button" disabled>Download</button>
           <label class="toggle">
-            <input id="verbose-toggle" type="checkbox" />
-            Verbose kills
+            <input id="json-toggle" type="checkbox" />
+            JSON output
           </label>
         </div>
       </section>

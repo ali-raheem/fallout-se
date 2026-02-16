@@ -8,6 +8,7 @@ pub use engine::{Engine, Session};
 pub use error::{CoreError, CoreErrorCode};
 pub use item_catalog::{ItemCatalog, detect_install_dir_from_save_path};
 pub use types::{
-    Capabilities, CapabilityIssue, DateParts, Game, InventoryEntry, ItemCatalogEntry,
-    KillCountEntry, PerkEntry, ResolvedInventoryEntry, SkillEntry, Snapshot, StatEntry, TraitEntry,
+    Capabilities, CapabilityIssue, CharacterExport, DateParts, Game, InventoryEntry,
+    ItemCatalogEntry, KillCountEntry, PerkEntry, ResolvedInventoryEntry, SkillEntry, Snapshot,
+    StatEntry, TraitEntry,
 };

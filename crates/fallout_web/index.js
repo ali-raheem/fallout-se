@@ -11,7 +11,7 @@ const elements = {
   chooseFile: document.getElementById("choose-file"),
   copyOutput: document.getElementById("copy-output"),
   downloadOutput: document.getElementById("download-output"),
-  verboseToggle: document.getElementById("verbose-toggle"),
+  jsonToggle: document.getElementById("json-toggle"),
   output: document.getElementById("output"),
   status: document.getElementById("status"),
 };
@@ -34,11 +34,15 @@ function resetOutput() {
   elements.output.textContent = "";
   elements.copyOutput.disabled = true;
   elements.downloadOutput.disabled = true;
+  elements.downloadOutput.textContent = "Download .txt";
 }
 
-function setRenderedOutput(text, filenameBase) {
+function setRenderedOutput(text, filenameBase, extension = "txt") {
   state.renderedText = text;
-  state.outputFilename = `${filenameBase}_sheet.txt`;
+  const normalizedExtension = extension === "json" ? "json" : "txt";
+  state.outputFilename = `${filenameBase}_sheet.${normalizedExtension}`;
+  elements.downloadOutput.textContent =
+    normalizedExtension === "json" ? "Download .json" : "Download .txt";
   elements.output.textContent = text;
   elements.copyOutput.disabled = false;
   elements.downloadOutput.disabled = false;
@@ -92,13 +96,18 @@ async function renderFile(file) {
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const wantsJsonOutput = elements.jsonToggle.checked;
     const options = {
-      verbose: elements.verboseToggle.checked,
+      json_output: wantsJsonOutput,
       metadata: null,
     };
 
-    const renderedText = wasmBindings.render_save_text(bytes, options);
-    setRenderedOutput(renderedText, normalizeFilename(file.name));
+    const renderedOutput = wasmBindings.render_save_text(bytes, options);
+    setRenderedOutput(
+      renderedOutput,
+      normalizeFilename(file.name),
+      wantsJsonOutput ? "json" : "txt",
+    );
     setStatus(`Rendered ${file.name}.`, "ok");
   } catch (error) {
     resetOutput();

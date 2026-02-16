@@ -1,5 +1,8 @@
 use fallout_core::core_api::{Engine, Game as CoreGame};
-use fallout_render::{TextRenderOptions, render_classic_sheet_with_inventory};
+use fallout_render::{
+    JsonStyle, TextRenderOptions, render_classic_sheet_with_inventory,
+    render_json_full_with_inventory,
+};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -7,7 +10,7 @@ use wasm_bindgen::prelude::*;
 #[serde(default)]
 pub struct WebRenderOptions {
     pub game_hint: Option<String>,
-    pub verbose: bool,
+    pub json_output: bool,
     pub metadata: Option<MetadataOptions>,
 }
 
@@ -86,11 +89,23 @@ fn render_save_text_impl(
         .map_err(|err| WebError::new("parse_failed", err.to_string()))?;
     let resolved_inventory = session.inventory_resolved_builtin();
 
+    if options.json_output {
+        let value = render_json_full_with_inventory(
+            &session,
+            JsonStyle::CanonicalV1,
+            Some(&resolved_inventory),
+        );
+        return serde_json::to_string_pretty(&value).map_err(|err| {
+            WebError::new(
+                "render_failed",
+                format!("failed to serialize rendered JSON output: {err}"),
+            )
+        });
+    }
+
     Ok(render_classic_sheet_with_inventory(
         &session,
-        TextRenderOptions {
-            verbose: options.verbose,
-        },
+        TextRenderOptions { verbose: false },
         Some(&resolved_inventory),
         None,
     ))
@@ -186,6 +201,23 @@ mod tests {
         let err = render_save_text_impl(&[], &WebRenderOptions::default())
             .expect_err("empty payload should fail");
         assert_eq!(err.code, "unsupported_file");
+    }
+
+    #[test]
+    fn render_save_text_impl_can_emit_json() {
+        let bytes = fixture_bytes("tests/fallout1_examples/SAVEGAME/SLOT01/SAVE.DAT");
+        let options = WebRenderOptions {
+            json_output: true,
+            ..WebRenderOptions::default()
+        };
+        let rendered =
+            render_save_text_impl(&bytes, &options).expect("json output should render");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&rendered).expect("json output should parse");
+        assert_eq!(parsed["game"], "Fallout1");
+        assert!(parsed.get("stats").is_some());
+        assert!(parsed.get("skills").is_some());
     }
 
     fn fixture_bytes(relative_path: &str) -> Vec<u8> {

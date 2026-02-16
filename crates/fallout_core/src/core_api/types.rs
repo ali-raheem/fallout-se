@@ -1,19 +1,20 @@
 use crate::gender::Gender;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Game {
     Fallout1,
     Fallout2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DateParts {
     pub day: i16,
     pub month: i16,
     pub year: i16,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub game: Game,
     pub character_name: String,
@@ -35,13 +36,13 @@ pub struct Snapshot {
     pub game_time: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InventoryEntry {
     pub quantity: i32,
     pub pid: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemCatalogEntry {
     pub pid: i32,
     pub name: String,
@@ -49,7 +50,7 @@ pub struct ItemCatalogEntry {
     pub item_type: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResolvedInventoryEntry {
     pub quantity: i32,
     pub pid: i32,
@@ -58,13 +59,13 @@ pub struct ResolvedInventoryEntry {
     pub item_type: Option<i32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CapabilityIssue {
     EditingNotImplemented,
     LowConfidenceLayout,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capabilities {
     pub can_query: bool,
     pub can_plan_edits: bool,
@@ -98,7 +99,7 @@ impl Capabilities {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatEntry {
     pub index: usize,
     pub name: String,
@@ -107,7 +108,7 @@ pub struct StatEntry {
     pub total: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkillEntry {
     pub index: usize,
     pub name: String,
@@ -117,22 +118,52 @@ pub struct SkillEntry {
     pub total: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PerkEntry {
     pub index: usize,
     pub name: String,
     pub rank: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KillCountEntry {
     pub index: usize,
     pub name: String,
     pub count: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TraitEntry {
     pub index: usize,
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CharacterExport {
+    pub game: Game,
+    pub description: String,
+    pub game_date: DateParts,
+    pub save_date: DateParts,
+    pub game_time: u32,
+    pub name: String,
+    pub gender: Gender,
+    pub level: i32,
+    pub xp: i32,
+    pub next_level_xp: i32,
+    pub skill_points: i32,
+    pub map: String,
+    pub map_id: i16,
+    pub elevation: i16,
+    pub global_var_count: usize,
+    pub hp: Option<i32>,
+    pub karma: i32,
+    pub reputation: i32,
+    pub special: Vec<StatEntry>,
+    pub stats: Vec<StatEntry>,
+    pub traits: Vec<TraitEntry>,
+    pub perks: Vec<PerkEntry>,
+    pub skills: Vec<SkillEntry>,
+    pub tagged_skills: Vec<usize>,
+    pub kill_counts: Vec<KillCountEntry>,
+    pub inventory: Vec<InventoryEntry>,
 }

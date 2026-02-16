@@ -146,6 +146,8 @@ name = "fallout-se-core"
 version = "0.1.4"
 dependencies = [
  "flate2",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

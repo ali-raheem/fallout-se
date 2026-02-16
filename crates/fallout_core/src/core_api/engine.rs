@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Cursor;
 
 use crate::fallout1;
@@ -9,14 +10,15 @@ use crate::gender::Gender;
 use super::ItemCatalog;
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
-    Capabilities, CapabilityIssue, DateParts, Game, InventoryEntry, KillCountEntry, PerkEntry,
-    ResolvedInventoryEntry, SkillEntry, Snapshot, StatEntry, TraitEntry,
+    Capabilities, CapabilityIssue, CharacterExport, DateParts, Game, InventoryEntry,
+    KillCountEntry, PerkEntry, ResolvedInventoryEntry, SkillEntry, Snapshot, StatEntry, TraitEntry,
 };
 
 const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
 const GAME_TIME_TICKS_PER_YEAR: u32 = 315_360_000;
 const INVENTORY_CAPS_PID: i32 = -1;
+const TRAIT_SLOT_COUNT: usize = 2;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;
@@ -96,6 +98,111 @@ impl Session {
 
     pub fn capabilities(&self) -> &Capabilities {
         &self.capabilities
+    }
+
+    pub fn export_character(&self) -> CharacterExport {
+        let snapshot = self.snapshot();
+        CharacterExport {
+            game: self.game(),
+            description: snapshot.description.clone(),
+            game_date: snapshot.game_date,
+            save_date: snapshot.file_date,
+            game_time: snapshot.game_time,
+            name: snapshot.character_name.clone(),
+            gender: snapshot.gender,
+            level: snapshot.level,
+            xp: snapshot.experience,
+            next_level_xp: self.next_level_xp(),
+            skill_points: snapshot.unspent_skill_points,
+            map: snapshot.map_filename.clone(),
+            map_id: snapshot.map_id,
+            elevation: snapshot.elevation,
+            global_var_count: snapshot.global_var_count,
+            hp: self.current_hp(),
+            karma: snapshot.karma,
+            reputation: snapshot.reputation,
+            special: self.special_stats(),
+            stats: self.stats(),
+            traits: self.selected_traits(),
+            perks: self.active_perks(),
+            skills: self.skills(),
+            tagged_skills: self.tagged_skill_indices(),
+            kill_counts: self.nonzero_kill_counts(),
+            inventory: self.inventory(),
+        }
+    }
+
+    pub fn apply_character(&mut self, character: &CharacterExport) -> Result<(), CoreError> {
+        if character.game != self.game {
+            return Err(CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!(
+                    "character export game mismatch: session is {:?}, input is {:?}",
+                    self.game, character.game
+                ),
+            ));
+        }
+
+        let current = self.export_character();
+
+        for stat in &character.special {
+            let current_base = current
+                .special
+                .iter()
+                .find(|entry| entry.index == stat.index)
+                .map(|entry| entry.base);
+            if current_base != Some(stat.base) {
+                self.set_base_stat(stat.index, stat.base)?;
+            }
+        }
+
+        if character.gender != current.gender {
+            self.set_gender(character.gender)?;
+        }
+        if character.level != current.level {
+            self.set_level(character.level)?;
+        }
+        if character.xp != current.xp {
+            self.set_experience(character.xp)?;
+        }
+        if character.skill_points != current.skill_points {
+            self.set_skill_points(character.skill_points)?;
+        }
+        if character.karma != current.karma {
+            self.set_karma(character.karma)?;
+        }
+        if character.reputation != current.reputation {
+            self.set_reputation(character.reputation)?;
+        }
+
+        if character.hp != current.hp {
+            let Some(hp) = character.hp else {
+                return Err(CoreError::new(
+                    CoreErrorCode::UnsupportedOperation,
+                    "cannot clear HP via character export",
+                ));
+            };
+            self.set_hp(hp)?;
+        }
+
+        if let Some(effective_age) = export_age_total(&character.stats) {
+            if Some(effective_age) != export_age_total(&current.stats) {
+                let base_age =
+                    effective_age.saturating_sub(elapsed_game_years(self.snapshot.game_time));
+                self.set_age(base_age)?;
+            }
+        }
+
+        if character.traits != current.traits {
+            self.apply_traits_from_export(&character.traits)?;
+        }
+        if character.perks != current.perks {
+            self.apply_perks_from_export(&character.perks)?;
+        }
+        if character.inventory != current.inventory {
+            self.apply_inventory_from_export(&character.inventory)?;
+        }
+        Ok(())
     }
 
     pub fn special_stats(&self) -> Vec<StatEntry> {
@@ -706,6 +813,65 @@ impl Session {
             LoadedDocument::Fallout2(doc) => doc.save.selected_traits,
         };
     }
+
+    fn apply_traits_from_export(&mut self, traits: &[TraitEntry]) -> Result<(), CoreError> {
+        for slot in 0..TRAIT_SLOT_COUNT {
+            self.clear_trait(slot)?;
+        }
+
+        for (slot, trait_entry) in traits.iter().take(TRAIT_SLOT_COUNT).enumerate() {
+            self.set_trait(slot, trait_entry.index)?;
+        }
+        Ok(())
+    }
+
+    fn apply_perks_from_export(&mut self, perks: &[PerkEntry]) -> Result<(), CoreError> {
+        for perk_index in 0..perk_count_for_game(self.game()) {
+            self.clear_perk(perk_index)?;
+        }
+
+        for perk in perks {
+            self.set_perk_rank(perk.index, perk.rank)?;
+        }
+        Ok(())
+    }
+
+    fn apply_inventory_from_export(
+        &mut self,
+        inventory: &[InventoryEntry],
+    ) -> Result<(), CoreError> {
+        let mut desired_by_pid: BTreeMap<i32, i32> = BTreeMap::new();
+        for item in inventory {
+            let quantity = desired_by_pid.entry(item.pid).or_insert(0);
+            *quantity = quantity.saturating_add(item.quantity);
+        }
+
+        let existing_pids: BTreeSet<i32> =
+            self.inventory().into_iter().map(|item| item.pid).collect();
+        for pid in existing_pids
+            .iter()
+            .copied()
+            .filter(|pid| !desired_by_pid.contains_key(pid))
+        {
+            self.remove_inventory_item(pid, None)?;
+        }
+
+        for (pid, quantity) in desired_by_pid {
+            if quantity <= 0 {
+                if existing_pids.contains(&pid) {
+                    self.remove_inventory_item(pid, None)?;
+                }
+                continue;
+            }
+
+            if existing_pids.contains(&pid) {
+                self.set_inventory_quantity(pid, quantity)?;
+            } else {
+                self.add_inventory_item(pid, quantity)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn parse_fallout1(bytes: &[u8]) -> std::io::Result<fallout1::Document> {
@@ -863,4 +1029,18 @@ fn normalize_tagged_skill_indices(tagged_skills: &[i32], skill_count: usize) -> 
         out.push(index);
     }
     out
+}
+
+fn export_age_total(stats: &[StatEntry]) -> Option<i32> {
+    stats
+        .iter()
+        .find(|stat| stat.index == STAT_AGE_INDEX)
+        .map(|stat| stat.total)
+}
+
+fn perk_count_for_game(game: Game) -> usize {
+    match game {
+        Game::Fallout1 => f1_types::PERK_NAMES.len(),
+        Game::Fallout2 => f2_types::PERK_NAMES.len(),
+    }
 }

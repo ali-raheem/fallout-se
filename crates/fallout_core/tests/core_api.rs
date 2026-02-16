@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use fallout_core::core_api::{CoreErrorCode, Engine, Game};
+use fallout_core::core_api::{CharacterExport, CoreErrorCode, Engine, Game};
 use fallout_core::gender::Gender;
 use fallout_core::{fallout1, fallout2};
 
@@ -593,4 +593,109 @@ fn session_can_edit_traits_perks_and_inventory_fallout2() {
             .quantity,
         expected_qty
     );
+}
+
+#[test]
+fn session_can_export_character_model() {
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    let export = session.export_character();
+    assert_eq!(export.game, Game::Fallout1);
+    assert_eq!(export.name, session.snapshot().character_name);
+    assert_eq!(export.description, session.snapshot().description);
+    assert_eq!(export.map, session.snapshot().map_filename);
+    assert_eq!(export.hp, session.current_hp());
+    assert_eq!(export.special, session.special_stats());
+    assert_eq!(export.stats, session.stats());
+    assert_eq!(export.skills, session.skills());
+    assert_eq!(export.tagged_skills, session.tagged_skill_indices());
+    assert_eq!(export.perks, session.active_perks());
+    assert_eq!(export.kill_counts, session.nonzero_kill_counts());
+    assert_eq!(export.inventory, session.inventory());
+    assert!(export.stats.iter().any(|entry| entry.name == "Age"));
+    assert!(export.stats.iter().any(|entry| entry.name == "Max HP"));
+}
+
+#[test]
+fn character_export_supports_serde_roundtrip() {
+    let engine = Engine::new();
+    let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
+    let session = engine
+        .open_bytes(&bytes, Some(Game::Fallout2))
+        .expect("failed to open Fallout 2 save");
+
+    let export = session.export_character();
+    let encoded = serde_json::to_string(&export).expect("export should serialize to JSON");
+    let decoded: CharacterExport =
+        serde_json::from_str(&encoded).expect("encoded JSON should deserialize");
+    assert_eq!(decoded, export);
+}
+
+#[test]
+fn session_can_apply_character_export_and_emit_modified_bytes_fallout2() {
+    let engine = Engine::new();
+    let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout2))
+        .expect("failed to open Fallout 2 save");
+
+    let mut export = session.export_character();
+    export.gender = Gender::Female;
+    export.level = 5;
+    export.xp = 4_321;
+    export.skill_points = 9;
+    export.karma = 250;
+    export.reputation = -12;
+    export.hp = Some(30);
+
+    let new_age_total = export
+        .stats
+        .iter()
+        .find(|entry| entry.index == 33)
+        .expect("stats should include age")
+        .total
+        .saturating_add(1);
+    export
+        .stats
+        .iter_mut()
+        .find(|entry| entry.index == 33)
+        .expect("stats should include mutable age")
+        .total = new_age_total;
+
+    session
+        .apply_character(&export)
+        .expect("failed to apply character export");
+
+    assert_eq!(session.snapshot().gender, Gender::Female);
+    assert_eq!(session.snapshot().level, 5);
+    assert_eq!(session.snapshot().experience, 4_321);
+    assert_eq!(session.snapshot().unspent_skill_points, 9);
+    assert_eq!(session.snapshot().karma, 250);
+    assert_eq!(session.snapshot().reputation, -12);
+    assert_eq!(session.current_hp(), Some(30));
+    assert_eq!(session.age(), new_age_total);
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 2 bytes");
+    assert_ne!(modified, bytes);
+
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout2))
+        .expect("failed to parse modified Fallout 2 bytes");
+    assert_eq!(reparsed.snapshot().gender, Gender::Female);
+    assert_eq!(reparsed.snapshot().level, 5);
+    assert_eq!(reparsed.snapshot().experience, 4_321);
+    assert_eq!(reparsed.snapshot().unspent_skill_points, 9);
+    assert_eq!(reparsed.snapshot().karma, 250);
+    assert_eq!(reparsed.snapshot().reputation, -12);
+    assert_eq!(reparsed.current_hp(), Some(30));
+    assert_eq!(reparsed.age(), new_age_total);
 }

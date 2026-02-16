@@ -4,7 +4,8 @@ use fallout_core::core_api::{Engine, ResolvedInventoryEntry, Session};
 use fallout_render::{
     FieldSelection, JsonStyle, TextRenderOptions, render_classic_sheet,
     render_classic_sheet_with_inventory, render_classic_sheet_with_options, render_json_full,
-    render_json_full_with_inventory, render_json_selected,
+    render_json_full_from_export, render_json_full_with_inventory, render_json_selected,
+    render_json_selected_from_export,
 };
 use serde_json::Value;
 
@@ -152,6 +153,34 @@ fn selected_json_max_hp_is_emitted_in_stats_section() {
     let stats = value["stats"].as_array().expect("stats should be an array");
     assert_eq!(stats.len(), 1);
     assert_eq!(stats[0]["name"], "Max HP");
+}
+
+#[test]
+fn full_json_from_export_matches_session_output() {
+    let session = session_from_path(fallout1_save_path(1));
+    let export = session.export_character();
+
+    let from_session = render_json_full(&session, JsonStyle::CanonicalV1);
+    let from_export = render_json_full_from_export(&export, JsonStyle::CanonicalV1);
+    assert_eq!(from_export, from_session);
+}
+
+#[test]
+fn selected_json_from_export_matches_session_output() {
+    let session = session_from_path(fallout1_save_path(1));
+    let export = session.export_character();
+    let fields = FieldSelection {
+        description: true,
+        name: true,
+        hp: true,
+        max_hp: true,
+        skills: true,
+        ..FieldSelection::default()
+    };
+
+    let from_session = render_json_selected(&session, &fields, JsonStyle::CanonicalV1);
+    let from_export = render_json_selected_from_export(&export, &fields, JsonStyle::CanonicalV1);
+    assert_eq!(from_export, from_session);
 }
 
 #[test]

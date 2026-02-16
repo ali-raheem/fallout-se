@@ -1,8 +1,8 @@
 use std::fmt::Write as _;
 
 use fallout_core::core_api::{
-    Game as CoreGame, InventoryEntry, KillCountEntry, PerkEntry, ResolvedInventoryEntry, Session,
-    SkillEntry, StatEntry, TraitEntry,
+    CharacterExport, Game as CoreGame, InventoryEntry, KillCountEntry, PerkEntry,
+    ResolvedInventoryEntry, Session, SkillEntry, StatEntry, TraitEntry,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -101,8 +101,21 @@ pub fn render_json_full_with_inventory(
     style: JsonStyle,
     inventory: Option<&[ResolvedInventoryEntry]>,
 ) -> JsonValue {
+    let export = session.export_character();
+    render_json_full_from_export_with_inventory(&export, style, inventory)
+}
+
+pub fn render_json_full_from_export(export: &CharacterExport, style: JsonStyle) -> JsonValue {
+    render_json_full_from_export_with_inventory(export, style, None)
+}
+
+pub fn render_json_full_from_export_with_inventory(
+    export: &CharacterExport,
+    style: JsonStyle,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+) -> JsonValue {
     match style {
-        JsonStyle::CanonicalV1 => JsonValue::Object(default_json(session, inventory)),
+        JsonStyle::CanonicalV1 => JsonValue::Object(default_json(export, inventory)),
     }
 }
 
@@ -120,8 +133,26 @@ pub fn render_json_selected_with_inventory(
     style: JsonStyle,
     inventory: Option<&[ResolvedInventoryEntry]>,
 ) -> JsonValue {
+    let export = session.export_character();
+    render_json_selected_from_export_with_inventory(&export, fields, style, inventory)
+}
+
+pub fn render_json_selected_from_export(
+    export: &CharacterExport,
+    fields: &FieldSelection,
+    style: JsonStyle,
+) -> JsonValue {
+    render_json_selected_from_export_with_inventory(export, fields, style, None)
+}
+
+pub fn render_json_selected_from_export_with_inventory(
+    export: &CharacterExport,
+    fields: &FieldSelection,
+    style: JsonStyle,
+    inventory: Option<&[ResolvedInventoryEntry]>,
+) -> JsonValue {
     match style {
-        JsonStyle::CanonicalV1 => JsonValue::Object(selected_json(fields, session, inventory)),
+        JsonStyle::CanonicalV1 => JsonValue::Object(selected_json(fields, export, inventory)),
     }
 }
 
@@ -158,25 +189,24 @@ pub fn render_text_with_options(
 
 fn selected_json(
     fields: &FieldSelection,
-    session: &Session,
+    export: &CharacterExport,
     inventory: Option<&[ResolvedInventoryEntry]>,
 ) -> JsonMap<String, JsonValue> {
-    let snapshot = session.snapshot();
     let mut out = JsonMap::new();
 
     if fields.description {
         out.insert(
             "description".to_string(),
-            JsonValue::String(snapshot.description.clone()),
+            JsonValue::String(export.description.clone()),
         );
     }
     if fields.game_date {
         out.insert(
             "game_date".to_string(),
             JsonValue::String(format_date(
-                snapshot.game_date.year,
-                snapshot.game_date.month,
-                snapshot.game_date.day,
+                export.game_date.year,
+                export.game_date.month,
+                export.game_date.day,
             )),
         );
     }
@@ -184,106 +214,100 @@ fn selected_json(
         out.insert(
             "save_date".to_string(),
             JsonValue::String(format_date(
-                snapshot.file_date.year,
-                snapshot.file_date.month,
-                snapshot.file_date.day,
+                export.save_date.year,
+                export.save_date.month,
+                export.save_date.day,
             )),
         );
     }
     if fields.game_time {
         out.insert(
             "game_time".to_string(),
-            JsonValue::String(format_game_time(snapshot.game_time)),
+            JsonValue::String(format_game_time(export.game_time)),
         );
     }
     if fields.name {
-        out.insert(
-            "name".to_string(),
-            JsonValue::String(snapshot.character_name.clone()),
-        );
+        out.insert("name".to_string(), JsonValue::String(export.name.clone()));
     }
     if fields.gender {
         out.insert(
             "gender".to_string(),
-            JsonValue::String(snapshot.gender.to_string()),
+            JsonValue::String(export.gender.to_string()),
         );
     }
     if fields.level {
-        out.insert("level".to_string(), JsonValue::from(snapshot.level));
+        out.insert("level".to_string(), JsonValue::from(export.level));
     }
     if fields.xp {
-        out.insert("xp".to_string(), JsonValue::from(snapshot.experience));
+        out.insert("xp".to_string(), JsonValue::from(export.xp));
     }
     if fields.next_level_xp {
         out.insert(
             "next_level_xp".to_string(),
-            JsonValue::from(session.next_level_xp()),
+            JsonValue::from(export.next_level_xp),
         );
     }
     if fields.skill_points {
         out.insert(
             "skill_points".to_string(),
-            JsonValue::from(snapshot.unspent_skill_points),
+            JsonValue::from(export.skill_points),
         );
     }
     if fields.map_filename {
-        out.insert(
-            "map".to_string(),
-            JsonValue::String(snapshot.map_filename.clone()),
-        );
+        out.insert("map".to_string(), JsonValue::String(export.map.clone()));
     }
     if fields.elevation {
-        out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
+        out.insert("elevation".to_string(), JsonValue::from(export.elevation));
     }
     if fields.hp {
         out.insert(
             "hp".to_string(),
-            match session.current_hp() {
+            match export.hp {
                 Some(v) => JsonValue::from(v),
                 None => JsonValue::Null,
             },
         );
     }
     if fields.karma {
-        out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
+        out.insert("karma".to_string(), JsonValue::from(export.karma));
     }
     if fields.reputation {
-        out.insert(
-            "reputation".to_string(),
-            JsonValue::from(snapshot.reputation),
-        );
+        out.insert("reputation".to_string(), JsonValue::from(export.reputation));
     }
     if fields.special {
-        out.insert("special".to_string(), special_to_json(session));
+        out.insert("special".to_string(), special_to_json(&export.special));
     }
     if fields.derived_stats {
-        out.insert("stats".to_string(), stats_to_json(session));
+        out.insert("stats".to_string(), stats_to_json(&export.stats));
     } else if fields.max_hp || fields.age {
         out.insert(
             "stats".to_string(),
-            selected_stats_to_json(session, fields.max_hp, fields.age),
+            selected_stats_to_json(&export.stats, fields.max_hp, fields.age),
         );
     }
     if fields.traits {
-        out.insert(
-            "traits".to_string(),
-            traits_to_json(&session.selected_traits()),
-        );
+        out.insert("traits".to_string(), traits_to_json(&export.traits));
     }
     if fields.perks {
-        out.insert("perks".to_string(), perks_to_json(session));
+        out.insert("perks".to_string(), perks_to_json(&export.perks));
     }
     if fields.skills {
-        out.insert("skills".to_string(), skills_to_json(session));
-        out.insert("tagged_skills".to_string(), tagged_skills_to_json(session));
+        out.insert("skills".to_string(), skills_to_json(&export.skills));
+        out.insert(
+            "tagged_skills".to_string(),
+            tagged_skills_to_json(&export.tagged_skills),
+        );
     }
     if fields.kills {
-        out.insert("kill_counts".to_string(), kill_counts_to_json(session));
+        out.insert(
+            "kill_counts".to_string(),
+            kill_counts_to_json(&export.kill_counts),
+        );
     }
     if fields.inventory {
         out.insert(
             "inventory".to_string(),
-            inventory_to_json(session, inventory),
+            inventory_to_json(&export.inventory, inventory),
         );
     }
 
@@ -291,125 +315,120 @@ fn selected_json(
 }
 
 fn default_json(
-    session: &Session,
+    export: &CharacterExport,
     inventory: Option<&[ResolvedInventoryEntry]>,
 ) -> JsonMap<String, JsonValue> {
-    let snapshot = session.snapshot();
     let mut out = JsonMap::new();
 
     out.insert(
         "game".to_string(),
-        JsonValue::String(match session.game() {
+        JsonValue::String(match export.game {
             CoreGame::Fallout1 => "Fallout1".to_string(),
             CoreGame::Fallout2 => "Fallout2".to_string(),
         }),
     );
     out.insert(
         "description".to_string(),
-        JsonValue::String(snapshot.description.clone()),
+        JsonValue::String(export.description.clone()),
     );
     out.insert(
         "game_date".to_string(),
         JsonValue::String(format_date(
-            snapshot.game_date.year,
-            snapshot.game_date.month,
-            snapshot.game_date.day,
+            export.game_date.year,
+            export.game_date.month,
+            export.game_date.day,
         )),
     );
     out.insert(
         "save_date".to_string(),
         JsonValue::String(format_date(
-            snapshot.file_date.year,
-            snapshot.file_date.month,
-            snapshot.file_date.day,
+            export.save_date.year,
+            export.save_date.month,
+            export.save_date.day,
         )),
     );
     out.insert(
         "game_time".to_string(),
-        JsonValue::String(format_game_time(snapshot.game_time)),
+        JsonValue::String(format_game_time(export.game_time)),
     );
-    out.insert(
-        "name".to_string(),
-        JsonValue::String(snapshot.character_name.clone()),
-    );
+    out.insert("name".to_string(), JsonValue::String(export.name.clone()));
     out.insert(
         "gender".to_string(),
-        JsonValue::String(snapshot.gender.to_string()),
+        JsonValue::String(export.gender.to_string()),
     );
-    out.insert("level".to_string(), JsonValue::from(snapshot.level));
-    out.insert("xp".to_string(), JsonValue::from(snapshot.experience));
+    out.insert("level".to_string(), JsonValue::from(export.level));
+    out.insert("xp".to_string(), JsonValue::from(export.xp));
     out.insert(
         "next_level_xp".to_string(),
-        JsonValue::from(session.next_level_xp()),
+        JsonValue::from(export.next_level_xp),
     );
     out.insert(
         "skill_points".to_string(),
-        JsonValue::from(snapshot.unspent_skill_points),
+        JsonValue::from(export.skill_points),
     );
-    out.insert(
-        "map".to_string(),
-        JsonValue::String(snapshot.map_filename.clone()),
-    );
-    out.insert("map_id".to_string(), JsonValue::from(snapshot.map_id));
-    out.insert("elevation".to_string(), JsonValue::from(snapshot.elevation));
+    out.insert("map".to_string(), JsonValue::String(export.map.clone()));
+    out.insert("map_id".to_string(), JsonValue::from(export.map_id));
+    out.insert("elevation".to_string(), JsonValue::from(export.elevation));
     out.insert(
         "global_var_count".to_string(),
-        JsonValue::from(snapshot.global_var_count),
+        JsonValue::from(export.global_var_count),
     );
     out.insert(
         "hp".to_string(),
-        match session.current_hp() {
+        match export.hp {
             Some(v) => JsonValue::from(v),
             None => JsonValue::Null,
         },
     );
-    out.insert("karma".to_string(), JsonValue::from(snapshot.karma));
-    out.insert(
-        "reputation".to_string(),
-        JsonValue::from(snapshot.reputation),
-    );
+    out.insert("karma".to_string(), JsonValue::from(export.karma));
+    out.insert("reputation".to_string(), JsonValue::from(export.reputation));
 
-    out.insert("special".to_string(), special_to_json(session));
-    out.insert("stats".to_string(), stats_to_json(session));
+    out.insert("special".to_string(), special_to_json(&export.special));
+    out.insert("stats".to_string(), stats_to_json(&export.stats));
+    out.insert("traits".to_string(), traits_to_json(&export.traits));
+    out.insert("perks".to_string(), perks_to_json(&export.perks));
+    out.insert("skills".to_string(), skills_to_json(&export.skills));
     out.insert(
-        "traits".to_string(),
-        traits_to_json(&session.selected_traits()),
+        "tagged_skills".to_string(),
+        tagged_skills_to_json(&export.tagged_skills),
     );
-    out.insert("perks".to_string(), perks_to_json(session));
-    out.insert("skills".to_string(), skills_to_json(session));
-    out.insert("tagged_skills".to_string(), tagged_skills_to_json(session));
-    out.insert("kill_counts".to_string(), kill_counts_to_json(session));
+    out.insert(
+        "kill_counts".to_string(),
+        kill_counts_to_json(&export.kill_counts),
+    );
     out.insert(
         "inventory".to_string(),
-        inventory_to_json(session, inventory),
+        inventory_to_json(&export.inventory, inventory),
     );
 
     out
 }
 
-fn special_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .special_stats()
-            .iter()
-            .map(stat_entry_to_json)
-            .collect(),
-    )
+fn special_to_json(special: &[StatEntry]) -> JsonValue {
+    JsonValue::Array(special.iter().map(stat_entry_to_json).collect())
 }
 
-fn stats_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(session.stats().iter().map(stat_entry_to_json).collect())
+fn stats_to_json(stats: &[StatEntry]) -> JsonValue {
+    JsonValue::Array(stats.iter().map(stat_entry_to_json).collect())
 }
 
-fn selected_stats_to_json(session: &Session, include_max_hp: bool, include_age: bool) -> JsonValue {
-    let mut selected = Vec::new();
+fn selected_stats_to_json(
+    stats: &[StatEntry],
+    include_max_hp: bool,
+    include_age: bool,
+) -> JsonValue {
+    let mut selected: Vec<&StatEntry> = Vec::new();
     if include_max_hp {
-        selected.push(session.stat(STAT_MAX_HP_INDEX));
+        if let Some(max_hp) = stats.iter().find(|stat| stat.index == STAT_MAX_HP_INDEX) {
+            selected.push(max_hp);
+        }
     }
     if include_age {
-        selected.push(session.stat(STAT_AGE_INDEX));
+        if let Some(age) = stats.iter().find(|stat| stat.index == STAT_AGE_INDEX) {
+            selected.push(age);
+        }
     }
-    JsonValue::Array(selected.iter().map(stat_entry_to_json).collect())
+    JsonValue::Array(selected.into_iter().map(stat_entry_to_json).collect())
 }
 
 fn stat_entry_to_json(s: &StatEntry) -> JsonValue {
@@ -421,10 +440,9 @@ fn stat_entry_to_json(s: &StatEntry) -> JsonValue {
     JsonValue::Object(m)
 }
 
-fn skills_to_json(session: &Session) -> JsonValue {
+fn skills_to_json(skills: &[SkillEntry]) -> JsonValue {
     JsonValue::Array(
-        session
-            .skills()
+        skills
             .iter()
             .map(|s: &SkillEntry| {
                 let mut m = JsonMap::new();
@@ -440,20 +458,13 @@ fn skills_to_json(session: &Session) -> JsonValue {
     )
 }
 
-fn tagged_skills_to_json(session: &Session) -> JsonValue {
-    JsonValue::Array(
-        session
-            .tagged_skill_indices()
-            .into_iter()
-            .map(JsonValue::from)
-            .collect(),
-    )
+fn tagged_skills_to_json(tagged_skills: &[usize]) -> JsonValue {
+    JsonValue::Array(tagged_skills.iter().copied().map(JsonValue::from).collect())
 }
 
-fn perks_to_json(session: &Session) -> JsonValue {
+fn perks_to_json(perks: &[PerkEntry]) -> JsonValue {
     JsonValue::Array(
-        session
-            .active_perks()
+        perks
             .iter()
             .map(|p: &PerkEntry| {
                 let mut m = JsonMap::new();
@@ -465,10 +476,9 @@ fn perks_to_json(session: &Session) -> JsonValue {
     )
 }
 
-fn kill_counts_to_json(session: &Session) -> JsonValue {
+fn kill_counts_to_json(kill_counts: &[KillCountEntry]) -> JsonValue {
     JsonValue::Array(
-        session
-            .nonzero_kill_counts()
+        kill_counts
             .iter()
             .map(|k: &KillCountEntry| {
                 let mut m = JsonMap::new();
@@ -480,7 +490,10 @@ fn kill_counts_to_json(session: &Session) -> JsonValue {
     )
 }
 
-fn inventory_to_json(session: &Session, resolved: Option<&[ResolvedInventoryEntry]>) -> JsonValue {
+fn inventory_to_json(
+    inventory: &[InventoryEntry],
+    resolved: Option<&[ResolvedInventoryEntry]>,
+) -> JsonValue {
     if let Some(items) = resolved {
         return JsonValue::Array(
             items
@@ -505,8 +518,7 @@ fn inventory_to_json(session: &Session, resolved: Option<&[ResolvedInventoryEntr
     }
 
     JsonValue::Array(
-        session
-            .inventory()
+        inventory
             .iter()
             .map(|item: &InventoryEntry| {
                 let mut m = JsonMap::new();
