@@ -69,6 +69,11 @@ const PERK_VAULT_CITY_TRAINING: usize = 108;
 const PERK_EXPERT_EXCREMENT_EXPEDITOR: usize = 117;
 const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
+const HEADER_VERSION_BLOCK_LEN: usize = 2 + 2 + 1;
+const HEADER_CHARACTER_NAME_OFFSET: usize = 24 + HEADER_VERSION_BLOCK_LEN;
+const HEADER_CHARACTER_NAME_LEN: usize = 32;
+const HEADER_DESCRIPTION_OFFSET: usize = HEADER_CHARACTER_NAME_OFFSET + HEADER_CHARACTER_NAME_LEN;
+const HEADER_DESCRIPTION_LEN: usize = 30;
 const I32_WIDTH: usize = 4;
 const PC_STATS_UNSPENT_SKILL_POINTS_OFFSET: usize = 0;
 const PC_STATS_LEVEL_OFFSET: usize = I32_WIDTH;
@@ -347,6 +352,34 @@ impl Document {
         Ok(())
     }
 
+    pub fn set_character_name(&mut self, value: &str) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Header)?;
+        patch_fixed_string_in_blob(
+            blob,
+            HEADER_CHARACTER_NAME_OFFSET,
+            HEADER_CHARACTER_NAME_LEN,
+            value,
+            "header",
+            "character_name",
+        )?;
+        self.save.header.character_name = value.to_string();
+        Ok(())
+    }
+
+    pub fn set_description(&mut self, value: &str) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Header)?;
+        patch_fixed_string_in_blob(
+            blob,
+            HEADER_DESCRIPTION_OFFSET,
+            HEADER_DESCRIPTION_LEN,
+            value,
+            "header",
+            "description",
+        )?;
+        self.save.header.description = value.to_string();
+        Ok(())
+    }
+
     pub fn set_base_stat(&mut self, stat_index: usize, value: i32) -> io::Result<()> {
         self.patch_base_stat_handler(stat_index, value, &format!("stat {stat_index}"))?;
         self.save.critter_data.base_stats[stat_index] = value;
@@ -388,6 +421,15 @@ impl Document {
             "skill points",
         )?;
         self.save.pc_stats.unspent_skill_points = skill_points;
+        Ok(())
+    }
+
+    pub fn set_skill_base_value(&mut self, skill_index: usize, raw: i32) -> io::Result<()> {
+        let critter_data = self.save.critter_data.clone();
+        let blob = self.section_blob_mut(SectionId::Handler(6))?;
+        let offset = find_skill_offset_in_handler6(&blob.bytes, &critter_data, skill_index)?;
+        patch_i32_in_blob(blob, offset, raw, "handler 6", "skill raw")?;
+        self.save.critter_data.skills[skill_index] = raw;
         Ok(())
     }
 
@@ -792,6 +834,49 @@ fn patch_i32_in_blob(
     Ok(())
 }
 
+fn patch_fixed_string_in_blob(
+    blob: &mut SectionBlob,
+    offset: usize,
+    width: usize,
+    value: &str,
+    section_label: &str,
+    field_label: &str,
+) -> io::Result<()> {
+    if value.contains('\0') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{field_label} cannot contain NUL characters"),
+        ));
+    }
+
+    let raw = value.as_bytes();
+    if raw.len() > width {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{field_label} is too long: {} bytes (max {width} bytes)",
+                raw.len()
+            ),
+        ));
+    }
+
+    if blob.bytes.len() < offset + width {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{section_label} too short for {field_label} patch: len={}, need at least {}",
+                blob.bytes.len(),
+                offset + width
+            ),
+        ));
+    }
+
+    let field = &mut blob.bytes[offset..offset + width];
+    field.fill(0);
+    field[..raw.len()].copy_from_slice(raw);
+    Ok(())
+}
+
 fn find_base_stat_offset_in_handler6(
     handler6_bytes: &[u8],
     critter_data: &CritterProtoData,
@@ -832,6 +917,56 @@ fn find_base_stat_offset_in_handler6(
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("ambiguous base stat prefix match in handler 6 blob for index {stat_index}"),
+        ));
+    }
+
+    Ok(first + prefix.len())
+}
+
+fn find_skill_offset_in_handler6(
+    handler6_bytes: &[u8],
+    critter_data: &CritterProtoData,
+    skill_index: usize,
+) -> io::Result<usize> {
+    if skill_index >= SKILL_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "invalid skill index {skill_index}, expected 0..{}",
+                SKILL_COUNT - 1
+            ),
+        ));
+    }
+
+    let mut prefix = Vec::new();
+    prefix.extend_from_slice(&critter_data.sneak_working.to_be_bytes());
+    prefix.extend_from_slice(&critter_data.flags.to_be_bytes());
+    for value in &critter_data.base_stats {
+        prefix.extend_from_slice(&value.to_be_bytes());
+    }
+    for value in &critter_data.bonus_stats {
+        prefix.extend_from_slice(&value.to_be_bytes());
+    }
+    for value in critter_data.skills.iter().take(skill_index) {
+        prefix.extend_from_slice(&value.to_be_bytes());
+    }
+
+    let mut matches = handler6_bytes
+        .windows(prefix.len())
+        .enumerate()
+        .filter_map(|(idx, window)| (window == prefix.as_slice()).then_some(idx));
+
+    let first = matches.next().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "could not locate skill prefix in handler 6 blob",
+        )
+    })?;
+
+    if matches.next().is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("ambiguous skill prefix match in handler 6 blob for index {skill_index}"),
         ));
     }
 

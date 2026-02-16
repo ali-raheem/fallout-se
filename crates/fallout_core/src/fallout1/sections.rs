@@ -291,7 +291,7 @@ pub fn skip_event_queue<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Resul
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("unknown event type: {event_type}"),
-                ))
+                ));
             }
         };
         r.skip(extra_bytes)?;

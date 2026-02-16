@@ -232,6 +232,7 @@
       }
 
       #form-editor input[type="number"],
+      #form-editor input[type="text"],
       #form-editor select {
         background: #1c0f09cc;
         border: 1px solid #cc854899;
@@ -244,6 +245,11 @@
 
       #form-editor input[type="number"] {
         width: 100px;
+      }
+
+      #form-editor input[type="text"] {
+        width: 240px;
+        max-width: 100%;
       }
 
       #form-editor select {
@@ -369,8 +375,8 @@
         <fieldset id="fs-save-info">
           <legend>Save Info</legend>
           <div class="field-row"><label>Game</label><span id="fi-game" class="read-only">—</span></div>
-          <div class="field-row"><label>Name</label><span id="fi-name" class="read-only">—</span></div>
-          <div class="field-row"><label>Description</label><span id="fi-description" class="read-only">—</span></div>
+          <div class="field-row"><label for="fi-name">Name</label><input id="fi-name" type="text" maxlength="32"></div>
+          <div class="field-row"><label for="fi-description">Description</label><input id="fi-description" type="text" maxlength="30"></div>
           <div class="field-row"><label>Map</label><span id="fi-map" class="read-only">—</span></div>
           <div class="field-row"><label>Map ID</label><span id="fi-map-id" class="read-only">—</span></div>
           <div class="field-row"><label>Elevation</label><span id="fi-elevation" class="read-only">—</span></div>
@@ -387,6 +393,7 @@
             <select id="fi-gender"><option value="Male">Male</option><option value="Female">Female</option></select>
           </div>
           <div class="field-row"><label for="fi-level">Level</label><input id="fi-level" type="number" min="1"></div>
+          <div class="field-row"><label for="fi-base-age">Base Age</label><input id="fi-base-age" type="number" min="1"></div>
           <div class="field-row"><label for="fi-xp">XP</label><input id="fi-xp" type="number" min="0"></div>
           <div class="field-row"><label for="fi-skill-points">Skill Points</label><input id="fi-skill-points" type="number"></div>
           <div class="field-row"><label for="fi-hp">HP</label><input id="fi-hp" type="number"></div>
@@ -412,7 +419,7 @@
         </fieldset>
 
         <fieldset id="fs-skills">
-          <legend>Skills (read-only)</legend>
+          <legend>Skills</legend>
           <div id="skill-rows"></div>
         </fieldset>
 

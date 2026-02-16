@@ -341,7 +341,10 @@ fn session_query_methods_match_fallout2_save_data() {
         .collect();
     let traits = session.selected_traits();
     assert_eq!(
-        traits.iter().map(|trait_entry| trait_entry.index).collect::<Vec<_>>(),
+        traits
+            .iter()
+            .map(|trait_entry| trait_entry.index)
+            .collect::<Vec<_>>(),
         expected_traits
     );
 
@@ -528,6 +531,154 @@ fn session_can_edit_age_level_and_xp_fallout2() {
     assert_eq!(reparsed.snapshot().unspent_skill_points, 9);
     assert_eq!(reparsed.snapshot().reputation, -12);
     assert_eq!(reparsed.snapshot().karma, 250);
+}
+
+#[test]
+fn session_can_edit_name_and_description_fallout1() {
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    session
+        .set_character_name("VaultDwellerX")
+        .expect("failed to set Fallout 1 character name");
+    session
+        .set_description("Edited Save")
+        .expect("failed to set Fallout 1 description");
+
+    assert_eq!(session.snapshot().character_name, "VaultDwellerX");
+    assert_eq!(session.snapshot().description, "Edited Save");
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 1 bytes");
+
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout1))
+        .expect("failed to parse modified Fallout 1 bytes");
+    assert_eq!(reparsed.snapshot().character_name, "VaultDwellerX");
+    assert_eq!(reparsed.snapshot().description, "Edited Save");
+}
+
+#[test]
+fn session_can_edit_name_and_description_fallout2() {
+    let engine = Engine::new();
+    let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout2))
+        .expect("failed to open Fallout 2 save");
+
+    session
+        .set_character_name("ChosenOneX")
+        .expect("failed to set Fallout 2 character name");
+    session
+        .set_description("Edited Save")
+        .expect("failed to set Fallout 2 description");
+
+    assert_eq!(session.snapshot().character_name, "ChosenOneX");
+    assert_eq!(session.snapshot().description, "Edited Save");
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 2 bytes");
+
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout2))
+        .expect("failed to parse modified Fallout 2 bytes");
+    assert_eq!(reparsed.snapshot().character_name, "ChosenOneX");
+    assert_eq!(reparsed.snapshot().description, "Edited Save");
+}
+
+#[test]
+fn session_can_edit_skill_raw_values_fallout1() {
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    let current_raw = session
+        .skills()
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skill list should include index 0")
+        .raw;
+    let updated_raw = current_raw.saturating_add(3);
+
+    session
+        .set_skill_base_value(0, updated_raw)
+        .expect("failed to set Fallout 1 skill raw");
+
+    let skill_after = session
+        .skills()
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skill list should include index 0")
+        .raw;
+    assert_eq!(skill_after, updated_raw);
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 1 bytes");
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout1))
+        .expect("failed to parse modified Fallout 1 bytes");
+    let reparsed_raw = reparsed
+        .skills()
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skill list should include index 0")
+        .raw;
+    assert_eq!(reparsed_raw, updated_raw);
+}
+
+#[test]
+fn session_can_edit_skill_raw_values_fallout2() {
+    let engine = Engine::new();
+    let path = fallout2_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 2 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout2))
+        .expect("failed to open Fallout 2 save");
+
+    let current_raw = session
+        .skills()
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skill list should include index 0")
+        .raw;
+    let updated_raw = current_raw.saturating_add(3);
+
+    session
+        .set_skill_base_value(0, updated_raw)
+        .expect("failed to set Fallout 2 skill raw");
+
+    let skill_after = session
+        .skills()
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skill list should include index 0")
+        .raw;
+    assert_eq!(skill_after, updated_raw);
+
+    let modified = session
+        .to_bytes_modified()
+        .expect("failed to emit modified Fallout 2 bytes");
+    let reparsed = engine
+        .open_bytes(&modified, Some(Game::Fallout2))
+        .expect("failed to parse modified Fallout 2 bytes");
+    let reparsed_raw = reparsed
+        .skills()
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skill list should include index 0")
+        .raw;
+    assert_eq!(reparsed_raw, updated_raw);
 }
 
 #[test]
@@ -727,7 +878,22 @@ fn session_can_apply_character_export_and_emit_modified_bytes_fallout2() {
     export.skill_points = 9;
     export.karma = 250;
     export.reputation = -12;
+    export.name = "ChosenOneX".to_string();
+    export.description = "Edited Save".to_string();
     export.hp = Some(30);
+    let new_skill_raw = export
+        .skills
+        .iter()
+        .find(|entry| entry.index == 0)
+        .expect("skills should include index 0")
+        .raw
+        .saturating_add(3);
+    export
+        .skills
+        .iter_mut()
+        .find(|entry| entry.index == 0)
+        .expect("skills should include mutable index 0")
+        .raw = new_skill_raw;
 
     let new_age_total = export
         .stats
@@ -753,8 +919,19 @@ fn session_can_apply_character_export_and_emit_modified_bytes_fallout2() {
     assert_eq!(session.snapshot().unspent_skill_points, 9);
     assert_eq!(session.snapshot().karma, 250);
     assert_eq!(session.snapshot().reputation, -12);
+    assert_eq!(session.snapshot().character_name, "ChosenOneX");
+    assert_eq!(session.snapshot().description, "Edited Save");
     assert_eq!(session.current_hp(), Some(30));
     assert_eq!(session.age(), new_age_total);
+    assert_eq!(
+        session
+            .skills()
+            .iter()
+            .find(|entry| entry.index == 0)
+            .expect("skills should include index 0")
+            .raw,
+        new_skill_raw
+    );
 
     let modified = session
         .to_bytes_modified()
@@ -770,6 +947,17 @@ fn session_can_apply_character_export_and_emit_modified_bytes_fallout2() {
     assert_eq!(reparsed.snapshot().unspent_skill_points, 9);
     assert_eq!(reparsed.snapshot().karma, 250);
     assert_eq!(reparsed.snapshot().reputation, -12);
+    assert_eq!(reparsed.snapshot().character_name, "ChosenOneX");
+    assert_eq!(reparsed.snapshot().description, "Edited Save");
     assert_eq!(reparsed.current_hp(), Some(30));
     assert_eq!(reparsed.age(), new_age_total);
+    assert_eq!(
+        reparsed
+            .skills()
+            .iter()
+            .find(|entry| entry.index == 0)
+            .expect("skills should include index 0")
+            .raw,
+        new_skill_raw
+    );
 }

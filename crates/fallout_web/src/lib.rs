@@ -352,8 +352,36 @@ mod tests {
             .expect("json should render");
         let mut edited: CharacterExport =
             serde_json::from_str(&exported).expect("json should parse as CharacterExport");
+        edited.name = "ChosenOneX".to_string();
+        edited.description = "Edited Save".to_string();
         edited.level = 5;
         edited.xp = 4_321;
+        let new_skill_raw = edited
+            .skills
+            .iter()
+            .find(|entry| entry.index == 0)
+            .expect("skills should include index 0")
+            .raw
+            .saturating_add(3);
+        edited
+            .skills
+            .iter_mut()
+            .find(|entry| entry.index == 0)
+            .expect("skills should include mutable index 0")
+            .raw = new_skill_raw;
+        let new_age_total = edited
+            .stats
+            .iter()
+            .find(|entry| entry.index == 33)
+            .expect("stats should include age")
+            .total
+            .saturating_add(1);
+        edited
+            .stats
+            .iter_mut()
+            .find(|entry| entry.index == 33)
+            .expect("stats should include mutable age")
+            .total = new_age_total;
 
         let edited_json =
             serde_json::to_string_pretty(&edited).expect("edited export should serialize");
@@ -365,8 +393,20 @@ mod tests {
         let reparsed = Engine::new()
             .open_bytes(&payload.updated_bytes, None)
             .expect("updated bytes should parse");
+        assert_eq!(reparsed.snapshot().character_name, "ChosenOneX");
+        assert_eq!(reparsed.snapshot().description, "Edited Save");
         assert_eq!(reparsed.snapshot().level, 5);
         assert_eq!(reparsed.snapshot().experience, 4_321);
+        assert_eq!(
+            reparsed
+                .skills()
+                .iter()
+                .find(|entry| entry.index == 0)
+                .expect("skills should include index 0")
+                .raw,
+            new_skill_raw
+        );
+        assert_eq!(reparsed.age(), new_age_total);
     }
 
     #[test]

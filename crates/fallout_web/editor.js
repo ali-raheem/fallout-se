@@ -1,5 +1,7 @@
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
 const WASM_BUNDLE_BASENAME = "fallout-se-web";
+const GAME_TIME_TICKS_PER_YEAR = 315_360_000;
+const STAT_AGE_INDEX = 33;
 
 const SPECIAL_NAMES = [
   "Strength", "Perception", "Endurance", "Charisma",
@@ -95,7 +97,7 @@ const elements = {
   status: document.getElementById("status"),
   formEditor: document.getElementById("form-editor"),
   jsonDetails: document.getElementById("json-details"),
-  // Read-only info spans
+  // Save info
   fiGame: document.getElementById("fi-game"),
   fiName: document.getElementById("fi-name"),
   fiDescription: document.getElementById("fi-description"),
@@ -110,6 +112,7 @@ const elements = {
   // Editable core stats
   fiGender: document.getElementById("fi-gender"),
   fiLevel: document.getElementById("fi-level"),
+  fiBaseAge: document.getElementById("fi-base-age"),
   fiXp: document.getElementById("fi-xp"),
   fiSkillPoints: document.getElementById("fi-skill-points"),
   fiHp: document.getElementById("fi-hp"),
@@ -155,6 +158,32 @@ function normalizeFilename(value) {
 function formatDate(d) {
   if (!d) return "—";
   return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+}
+
+function elapsedGameYears(gameTime) {
+  const parsed = Number(gameTime);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.floor(parsed / GAME_TIME_TICKS_PER_YEAR);
+}
+
+function findAgeStat(stats) {
+  if (!Array.isArray(stats)) {
+    return null;
+  }
+  return stats.find((s) => s && s.index === STAT_AGE_INDEX) || null;
+}
+
+function baseAgeFromJson(json) {
+  const ageStat = findAgeStat(json.stats);
+  if (!ageStat) {
+    return "";
+  }
+
+  const effectiveTotal = Number(ageStat.total) || 0;
+  const bonus = Number(ageStat.bonus) || 0;
+  return effectiveTotal - bonus - elapsedGameYears(json.game_time);
 }
 
 function getPerkNamesForGame() {
@@ -279,7 +308,8 @@ function buildSkillRows(skills) {
     row.className = "field-row";
     row.innerHTML =
       `<label>${s.name}</label>` +
-      `<span class="read-only">raw: ${s.raw}</span>` +
+      `<span class="read-only">raw:</span>` +
+      `<input type="number" class="skill-raw" data-index="${s.index}" value="${s.raw}">` +
       `<span class="read-only">tag: ${s.tag_bonus}</span>` +
       `<span class="read-only">bonus: ${s.bonus}</span>` +
       `<span class="read-only">total: ${s.total}</span>`;
@@ -331,10 +361,10 @@ function buildTaggedSkillRows(taggedSkills, skills) {
 }
 
 function populateFormFromJson(json) {
-  // Save info (read-only)
+  // Save info
   elements.fiGame.textContent = json.game || "—";
-  elements.fiName.textContent = json.name || "—";
-  elements.fiDescription.textContent = json.description || "—";
+  elements.fiName.value = json.name || "";
+  elements.fiDescription.value = json.description || "";
   elements.fiMap.textContent = json.map || "—";
   elements.fiMapId.textContent = json.map_id ?? "—";
   elements.fiElevation.textContent = json.elevation ?? "—";
@@ -347,6 +377,7 @@ function populateFormFromJson(json) {
   // Core stats (editable)
   elements.fiGender.value = json.gender || "Male";
   elements.fiLevel.value = json.level ?? "";
+  elements.fiBaseAge.value = baseAgeFromJson(json);
   elements.fiXp.value = json.xp ?? "";
   elements.fiSkillPoints.value = json.skill_points ?? "";
   elements.fiHp.value = json.hp ?? "";
@@ -366,7 +397,7 @@ function populateFormFromJson(json) {
     addPerkRow(perkNames, p.index, p.rank);
   }
 
-  // Skills (read-only)
+  // Skills
   buildSkillRows(json.skills || []);
 
   // Derived stats (read-only)
@@ -400,6 +431,10 @@ function syncFormToJson() {
 
   const json = state.currentJson;
 
+  // Save info
+  json.name = elements.fiName.value;
+  json.description = elements.fiDescription.value;
+
   // Core stats
   json.gender = elements.fiGender.value;
   json.level = parseInt(elements.fiLevel.value, 10) || 0;
@@ -408,6 +443,13 @@ function syncFormToJson() {
   json.hp = parseInt(elements.fiHp.value, 10) || 0;
   json.karma = parseInt(elements.fiKarma.value, 10) || 0;
   json.reputation = parseInt(elements.fiReputation.value, 10) || 0;
+  const ageStat = findAgeStat(json.stats);
+  if (ageStat) {
+    const baseAge = parseInt(elements.fiBaseAge.value, 10) || 0;
+    const ageBonus = Number(ageStat.bonus) || 0;
+    ageStat.base = baseAge;
+    ageStat.total = baseAge + ageBonus + elapsedGameYears(json.game_time);
+  }
 
   // S.P.E.C.I.A.L. base values
   const baseInputs = elements.specialRows.querySelectorAll(".special-base");
@@ -437,6 +479,16 @@ function syncFormToJson() {
     const rank = parseInt(rankInp.value, 10) || 1;
     const name = perkNames[index] || `Perk #${index}`;
     json.perks.push({ index, name, rank });
+  }
+
+  // Skills raw/base values
+  const skillRawInputs = elements.skillRows.querySelectorAll(".skill-raw");
+  for (const inp of skillRawInputs) {
+    const skillIndex = parseInt(inp.dataset.index, 10);
+    const skill = (json.skills || []).find((s) => s.index === skillIndex);
+    if (skill) {
+      skill.raw = parseInt(inp.value, 10) || 0;
+    }
   }
 
   // Inventory
@@ -705,9 +757,10 @@ function wireDragAndDrop() {
 }
 
 function wireFormEvents() {
-  // Editable core stat inputs
+  // Editable save info/core stat inputs
   const coreInputs = [
-    elements.fiGender, elements.fiLevel, elements.fiXp,
+    elements.fiName, elements.fiDescription,
+    elements.fiGender, elements.fiLevel, elements.fiBaseAge, elements.fiXp,
     elements.fiSkillPoints, elements.fiHp, elements.fiKarma, elements.fiReputation,
   ];
   for (const el of coreInputs) {
@@ -722,6 +775,13 @@ function wireFormEvents() {
   // S.P.E.C.I.A.L. base inputs (delegated)
   elements.specialRows.addEventListener("input", (e) => {
     if (e.target.classList.contains("special-base")) {
+      syncFormToJson();
+    }
+  });
+
+  // Skill raw inputs (delegated)
+  elements.skillRows.addEventListener("input", (e) => {
+    if (e.target.classList.contains("skill-raw")) {
       syncFormToJson();
     }
   });

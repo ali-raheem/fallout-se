@@ -7,12 +7,12 @@ use crate::fallout2;
 use crate::fallout2::types as f2_types;
 use crate::gender::Gender;
 
-use super::{ItemCatalog, TraitCatalog};
 use super::error::{CoreError, CoreErrorCode};
 use super::types::{
     Capabilities, CapabilityIssue, CharacterExport, DateParts, Game, InventoryEntry,
     KillCountEntry, PerkEntry, ResolvedInventoryEntry, SkillEntry, Snapshot, StatEntry, TraitEntry,
 };
+use super::{ItemCatalog, TraitCatalog};
 
 const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
@@ -156,6 +156,12 @@ impl Session {
             }
         }
 
+        if character.name != current.name {
+            self.set_character_name(&character.name)?;
+        }
+        if character.description != current.description {
+            self.set_description(&character.description)?;
+        }
         if character.gender != current.gender {
             self.set_gender(character.gender)?;
         }
@@ -174,6 +180,16 @@ impl Session {
         if character.reputation != current.reputation {
             self.set_reputation(character.reputation)?;
         }
+        for skill in &character.skills {
+            let current_raw = current
+                .skills
+                .iter()
+                .find(|entry| entry.index == skill.index)
+                .map(|entry| entry.raw);
+            if current_raw != Some(skill.raw) {
+                self.set_skill_base_value(skill.index, skill.raw)?;
+            }
+        }
 
         if character.hp != current.hp {
             let Some(hp) = character.hp else {
@@ -187,8 +203,10 @@ impl Session {
 
         if let Some(effective_age) = export_age_total(&character.stats) {
             if Some(effective_age) != export_age_total(&current.stats) {
-                let base_age =
-                    effective_age.saturating_sub(elapsed_game_years(self.snapshot.game_time));
+                let age_bonus = export_age_bonus(&current.stats).unwrap_or(0);
+                let base_age = effective_age
+                    .saturating_sub(elapsed_game_years(self.snapshot.game_time))
+                    .saturating_sub(age_bonus);
                 self.set_age(base_age)?;
             }
         }
@@ -627,6 +645,38 @@ impl Session {
         })
     }
 
+    pub fn set_character_name(&mut self, name: &str) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_character_name(name),
+            LoadedDocument::Fallout2(doc) => doc.set_character_name(name),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set character name: {e}"),
+            )
+        })?;
+
+        self.snapshot.character_name = name.to_string();
+        Ok(())
+    }
+
+    pub fn set_description(&mut self, description: &str) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_description(description),
+            LoadedDocument::Fallout2(doc) => doc.set_description(description),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set description: {e}"),
+            )
+        })?;
+
+        self.snapshot.description = description.to_string();
+        Ok(())
+    }
+
     pub fn set_level(&mut self, level: i32) -> Result<(), CoreError> {
         match &mut self.document {
             LoadedDocument::Fallout1(doc) => doc.set_level(level),
@@ -673,6 +723,19 @@ impl Session {
 
         self.snapshot.unspent_skill_points = skill_points;
         Ok(())
+    }
+
+    pub fn set_skill_base_value(&mut self, skill_index: usize, raw: i32) -> Result<(), CoreError> {
+        match &mut self.document {
+            LoadedDocument::Fallout1(doc) => doc.set_skill_base_value(skill_index, raw),
+            LoadedDocument::Fallout2(doc) => doc.set_skill_base_value(skill_index, raw),
+        }
+        .map_err(|e| {
+            CoreError::new(
+                CoreErrorCode::UnsupportedOperation,
+                format!("failed to set skill {skill_index} raw value: {e}"),
+            )
+        })
     }
 
     pub fn set_reputation(&mut self, reputation: i32) -> Result<(), CoreError> {
@@ -1044,6 +1107,13 @@ fn export_age_total(stats: &[StatEntry]) -> Option<i32> {
         .iter()
         .find(|stat| stat.index == STAT_AGE_INDEX)
         .map(|stat| stat.total)
+}
+
+fn export_age_bonus(stats: &[StatEntry]) -> Option<i32> {
+    stats
+        .iter()
+        .find(|stat| stat.index == STAT_AGE_INDEX)
+        .map(|stat| stat.bonus)
 }
 
 fn perk_count_for_game(game: Game) -> usize {

@@ -29,8 +29,16 @@ const STAT_INVALID: i32 = -1;
 
 const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
+const HEADER_VERSION_BLOCK_LEN: usize = 2 + 2 + 1;
+const HEADER_CHARACTER_NAME_OFFSET: usize = 24 + HEADER_VERSION_BLOCK_LEN;
+const HEADER_CHARACTER_NAME_LEN: usize = 32;
+const HEADER_DESCRIPTION_OFFSET: usize = HEADER_CHARACTER_NAME_OFFSET + HEADER_CHARACTER_NAME_LEN;
+const HEADER_DESCRIPTION_LEN: usize = 30;
 const CRITTER_PROTO_BASE_STATS_OFFSET: usize = 8;
 const I32_WIDTH: usize = 4;
+const CRITTER_PROTO_SKILLS_OFFSET: usize = CRITTER_PROTO_BASE_STATS_OFFSET
+    + SAVEABLE_STAT_COUNT * I32_WIDTH
+    + SAVEABLE_STAT_COUNT * I32_WIDTH;
 const CRITTER_PROTO_AGE_OFFSET: usize =
     CRITTER_PROTO_BASE_STATS_OFFSET + STAT_AGE_INDEX * I32_WIDTH;
 const GENDER_OFFSET_IN_HANDLER6: usize =
@@ -372,6 +380,34 @@ impl Document {
         Ok(())
     }
 
+    pub fn set_character_name(&mut self, value: &str) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Header)?;
+        patch_fixed_string_in_blob(
+            blob,
+            HEADER_CHARACTER_NAME_OFFSET,
+            HEADER_CHARACTER_NAME_LEN,
+            value,
+            "header",
+            "character_name",
+        )?;
+        self.save.header.character_name = value.to_string();
+        Ok(())
+    }
+
+    pub fn set_description(&mut self, value: &str) -> io::Result<()> {
+        let blob = self.section_blob_mut(SectionId::Header)?;
+        patch_fixed_string_in_blob(
+            blob,
+            HEADER_DESCRIPTION_OFFSET,
+            HEADER_DESCRIPTION_LEN,
+            value,
+            "header",
+            "description",
+        )?;
+        self.save.header.description = value.to_string();
+        Ok(())
+    }
+
     pub fn set_base_stat(&mut self, stat_index: usize, value: i32) -> io::Result<()> {
         let offset = CRITTER_PROTO_BASE_STATS_OFFSET + stat_index * I32_WIDTH;
         self.patch_handler6_i32(offset, value, &format!("stat {stat_index}"))?;
@@ -414,6 +450,23 @@ impl Document {
             "skill points",
         )?;
         self.save.pc_stats.unspent_skill_points = skill_points;
+        Ok(())
+    }
+
+    pub fn set_skill_base_value(&mut self, skill_index: usize, raw: i32) -> io::Result<()> {
+        if skill_index >= SKILL_COUNT {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid skill index {skill_index}, expected 0..{}",
+                    SKILL_COUNT - 1
+                ),
+            ));
+        }
+
+        let offset = CRITTER_PROTO_SKILLS_OFFSET + skill_index * I32_WIDTH;
+        self.patch_handler6_i32(offset, raw, "skill raw")?;
+        self.save.critter_data.skills[skill_index] = raw;
         Ok(())
     }
 
@@ -777,6 +830,49 @@ fn patch_i32_in_blob(
     }
 
     blob.bytes[offset..offset + I32_WIDTH].copy_from_slice(&raw.to_be_bytes());
+    Ok(())
+}
+
+fn patch_fixed_string_in_blob(
+    blob: &mut SectionBlob,
+    offset: usize,
+    width: usize,
+    value: &str,
+    section_label: &str,
+    field_label: &str,
+) -> io::Result<()> {
+    if value.contains('\0') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{field_label} cannot contain NUL characters"),
+        ));
+    }
+
+    let raw = value.as_bytes();
+    if raw.len() > width {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{field_label} is too long: {} bytes (max {width} bytes)",
+                raw.len()
+            ),
+        ));
+    }
+
+    if blob.bytes.len() < offset + width {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{section_label} too short for {field_label} patch: len={}, need at least {}",
+                blob.bytes.len(),
+                offset + width
+            ),
+        ));
+    }
+
+    let field = &mut blob.bytes[offset..offset + width];
+    field.fill(0);
+    field[..raw.len()].copy_from_slice(raw);
     Ok(())
 }
 
