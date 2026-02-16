@@ -109,6 +109,8 @@ fn cli_default_text_includes_detailed_sections() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Strength: 08"));
+    assert!(!stdout.contains("Strength: 08 (+3)"));
     assert!(stdout.contains("::: Traits :::"));
     assert!(stdout.contains("Gifted"));
     assert!(stdout.contains("Finesse"));

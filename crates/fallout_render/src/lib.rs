@@ -678,12 +678,7 @@ fn render_classic_sheet_impl(
         }
         line.push_str(special_names[row]);
         line.push_str(": ");
-        if stat.bonus != 0 {
-            write!(line, "{:02} ({:+})", stat.total, stat.bonus)
-                .expect("writing to String cannot fail");
-        } else {
-            write!(line, "{:02}", stat.total).expect("writing to String cannot fail");
-        }
+        write!(line, "{:02}", stat.total).expect("writing to String cannot fail");
 
         let mid = &middle_cols[row];
         let mid_val = match row {
