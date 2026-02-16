@@ -186,6 +186,119 @@
         color: var(--error);
       }
 
+      #form-editor {
+        display: none;
+        border-top: 1px solid var(--panel-border);
+        padding: 16px 24px 24px;
+      }
+
+      #form-editor.visible {
+        display: block;
+      }
+
+      #form-editor fieldset {
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        background: #1c0f09aa;
+        padding: 14px 16px;
+        margin: 0 0 16px;
+      }
+
+      #form-editor legend {
+        color: var(--accent);
+        text-transform: uppercase;
+        font-size: 0.9rem;
+        letter-spacing: 0.06em;
+        padding: 0 6px;
+      }
+
+      .field-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 6px 0;
+        flex-wrap: wrap;
+      }
+
+      .field-row label {
+        min-width: 130px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .field-row .read-only {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      #form-editor input[type="number"],
+      #form-editor select {
+        background: #1c0f09cc;
+        border: 1px solid #cc854899;
+        border-radius: 6px;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.9rem;
+        padding: 4px 8px;
+      }
+
+      #form-editor input[type="number"] {
+        width: 100px;
+      }
+
+      #form-editor select {
+        max-width: 260px;
+      }
+
+      .dynamic-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .dynamic-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .add-btn,
+      .remove-btn {
+        border: 1px solid #c17739;
+        background: #4d2612;
+        color: var(--text);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+
+      .add-btn:hover,
+      .remove-btn:hover {
+        border-color: var(--accent);
+      }
+
+      .remove-btn {
+        background: #3a1208;
+        border-color: #aa4422;
+        color: var(--error);
+        padding: 4px 8px;
+      }
+
+      #json-details summary {
+        cursor: pointer;
+        color: var(--accent);
+        padding: 8px 0;
+        font-size: 0.95rem;
+        user-select: none;
+      }
+
+      #json-details summary:hover {
+        text-decoration: underline;
+      }
+
       @media (max-width: 640px) {
         body {
           padding: 14px;
@@ -252,9 +365,85 @@
 
       <p id="status" class="status" aria-live="polite"></p>
 
+      <section id="form-editor">
+        <fieldset id="fs-save-info">
+          <legend>Save Info</legend>
+          <div class="field-row"><label>Game</label><span id="fi-game" class="read-only">—</span></div>
+          <div class="field-row"><label>Name</label><span id="fi-name" class="read-only">—</span></div>
+          <div class="field-row"><label>Description</label><span id="fi-description" class="read-only">—</span></div>
+          <div class="field-row"><label>Map</label><span id="fi-map" class="read-only">—</span></div>
+          <div class="field-row"><label>Map ID</label><span id="fi-map-id" class="read-only">—</span></div>
+          <div class="field-row"><label>Elevation</label><span id="fi-elevation" class="read-only">—</span></div>
+          <div class="field-row"><label>Game Date</label><span id="fi-game-date" class="read-only">—</span></div>
+          <div class="field-row"><label>Save Date</label><span id="fi-save-date" class="read-only">—</span></div>
+          <div class="field-row"><label>Game Time</label><span id="fi-game-time" class="read-only">—</span></div>
+          <div class="field-row"><label>Global Vars</label><span id="fi-global-var-count" class="read-only">—</span></div>
+          <div class="field-row"><label>Next Level XP</label><span id="fi-next-level-xp" class="read-only">—</span></div>
+        </fieldset>
+
+        <fieldset id="fs-core-stats">
+          <legend>Core Stats</legend>
+          <div class="field-row"><label for="fi-gender">Gender</label>
+            <select id="fi-gender"><option value="Male">Male</option><option value="Female">Female</option></select>
+          </div>
+          <div class="field-row"><label for="fi-level">Level</label><input id="fi-level" type="number" min="1"></div>
+          <div class="field-row"><label for="fi-xp">XP</label><input id="fi-xp" type="number" min="0"></div>
+          <div class="field-row"><label for="fi-skill-points">Skill Points</label><input id="fi-skill-points" type="number"></div>
+          <div class="field-row"><label for="fi-hp">HP</label><input id="fi-hp" type="number"></div>
+          <div class="field-row"><label for="fi-karma">Karma</label><input id="fi-karma" type="number"></div>
+          <div class="field-row"><label for="fi-reputation">Reputation</label><input id="fi-reputation" type="number"></div>
+        </fieldset>
+
+        <fieldset id="fs-special">
+          <legend>S.P.E.C.I.A.L.</legend>
+          <div id="special-rows"></div>
+        </fieldset>
+
+        <fieldset id="fs-traits">
+          <legend>Traits</legend>
+          <div class="field-row"><label for="fi-trait-0">Trait 1</label><select id="fi-trait-0"></select></div>
+          <div class="field-row"><label for="fi-trait-1">Trait 2</label><select id="fi-trait-1"></select></div>
+        </fieldset>
+
+        <fieldset id="fs-perks">
+          <legend>Perks</legend>
+          <div id="perk-rows" class="dynamic-rows"></div>
+          <button id="add-perk" class="add-btn" type="button">+ Add Perk</button>
+        </fieldset>
+
+        <fieldset id="fs-skills">
+          <legend>Skills (read-only)</legend>
+          <div id="skill-rows"></div>
+        </fieldset>
+
+        <fieldset id="fs-stats">
+          <legend>Derived Stats (read-only)</legend>
+          <div id="stat-rows"></div>
+        </fieldset>
+
+        <fieldset id="fs-kill-counts">
+          <legend>Kill Counts (read-only)</legend>
+          <div id="kill-count-rows"></div>
+        </fieldset>
+
+        <fieldset id="fs-tagged-skills">
+          <legend>Tagged Skills (read-only)</legend>
+          <div id="tagged-skill-rows"></div>
+        </fieldset>
+
+        <fieldset id="fs-inventory">
+          <legend>Inventory</legend>
+          <div id="inventory-rows" class="dynamic-rows"></div>
+          <button id="add-inventory" class="add-btn" type="button">+ Add Item</button>
+        </fieldset>
+      </section>
+
       <section class="editor-wrap" aria-label="editable json">
-        <p class="editor-label">Editable CharacterExport JSON</p>
-        <textarea id="json-editor" spellcheck="false" autocomplete="off"></textarea>
+        <details id="json-details">
+          <summary>Raw JSON</summary>
+          <p class="editor-label">Editable CharacterExport JSON</p>
+          <textarea id="json-editor" spellcheck="false" autocomplete="off"></textarea>
+        </details>
       </section>
     </main>
   </body>
