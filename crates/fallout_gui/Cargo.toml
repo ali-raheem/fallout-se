@@ -6,6 +6,7 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 description = "Native GUI shell for Fallout save editor"
+publish = false
 
 [dependencies]
-fallout_core = { package = "fallout-se-core", version = "0.1.5", path = "../fallout_core" }
+fallout_core = { package = "fallout-se-core", version = "0.1.6", path = "../fallout_core" }

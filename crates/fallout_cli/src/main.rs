@@ -1970,36 +1970,40 @@ fn resolve_hint(game: Option<GameKind>, fallout1: bool, fallout2: bool) -> Optio
     .map(to_core_game)
 }
 
+fn load_catalog_from_install_dir<C, E: std::fmt::Display>(
+    save_path: &Path,
+    install_dir_override: Option<&Path>,
+    loader: impl Fn(&Path) -> Result<C, E>,
+) -> Result<C, String> {
+    let dir = if let Some(d) = install_dir_override {
+        d.to_path_buf()
+    } else {
+        detect_install_dir_from_save_path(save_path).ok_or_else(|| {
+            format!(
+                "failed to auto-detect install dir from {}",
+                save_path.display()
+            )
+        })?
+    };
+    loader(&dir).map_err(|e| e.to_string())
+}
+
 fn load_item_catalog(
     save_path: &Path,
     install_dir_override: Option<&Path>,
 ) -> Result<ItemCatalog, String> {
-    if let Some(install_dir) = install_dir_override {
-        return ItemCatalog::load_from_install_dir(install_dir).map_err(|e| e.to_string());
-    }
-    let install_dir = detect_install_dir_from_save_path(save_path).ok_or_else(|| {
-        format!(
-            "failed to auto-detect install dir from {}",
-            save_path.display()
-        )
-    })?;
-    ItemCatalog::load_from_install_dir(&install_dir).map_err(|e| e.to_string())
+    load_catalog_from_install_dir(save_path, install_dir_override, |dir| {
+        ItemCatalog::load_from_install_dir(dir)
+    })
 }
 
 fn load_trait_catalog(
     save_path: &Path,
     install_dir_override: Option<&Path>,
 ) -> Result<TraitCatalog, String> {
-    if let Some(install_dir) = install_dir_override {
-        return TraitCatalog::load_from_install_dir(install_dir).map_err(|e| e.to_string());
-    }
-    let install_dir = detect_install_dir_from_save_path(save_path).ok_or_else(|| {
-        format!(
-            "failed to auto-detect install dir from {}",
-            save_path.display()
-        )
-    })?;
-    TraitCatalog::load_from_install_dir(&install_dir).map_err(|e| e.to_string())
+    load_catalog_from_install_dir(save_path, install_dir_override, |dir| {
+        TraitCatalog::load_from_install_dir(dir)
+    })
 }
 
 fn to_core_gender(gender: GenderArg) -> Gender {

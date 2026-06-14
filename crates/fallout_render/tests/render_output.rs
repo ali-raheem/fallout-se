@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use fallout_core::core_api::{Engine, ResolvedInventoryEntry, Session};
 use fallout_render::{
     FieldSelection, JsonStyle, TextRenderOptions, render_classic_sheet,
-    render_classic_sheet_with_inventory, render_classic_sheet_with_options, render_json_full,
-    render_json_full_from_export, render_json_full_with_inventory, render_json_selected,
-    render_json_selected_from_export,
+    render_classic_sheet_with_inventory_and_traits, render_classic_sheet_with_options,
+    render_json_full, render_json_full_from_export, render_json_full_with_inventory,
+    render_json_selected, render_json_selected_from_export,
 };
 use serde_json::Value;
 
@@ -285,11 +285,12 @@ fn classic_sheet_can_include_resolved_inventory_and_total_weight() {
         })
         .collect();
 
-    let rendered = render_classic_sheet_with_inventory(
+    let rendered = render_classic_sheet_with_inventory_and_traits(
         &session,
         TextRenderOptions::default(),
         Some(&resolved),
         Some(123),
+        None,
     );
     let carry_weight = session.stat(12).total;
     assert!(rendered.contains(&format!("Total Weight: 123/{carry_weight} lbs.")));

@@ -3,7 +3,7 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fallout_core::core_api::{CharacterExport, CoreErrorCode, Engine, Game, TraitCatalog};
+use fallout_core::core_api::{CharacterExport, CoreErrorCode, Engine, Game, TraitCatalog, TraitEntry};
 use fallout_core::gender::Gender;
 use fallout_core::{fallout1, fallout2};
 
@@ -237,6 +237,34 @@ fn session_query_methods_match_fallout1_save_data() {
     assert!(kills.iter().any(|k| k.index == 7 && k.count == 128));
 
     assert_eq!(session.map_files(), save.map_files);
+}
+
+#[test]
+fn selected_traits_resolved_drops_oob_indices_without_catalog_entry() {
+    use fallout_core::core_api::Game;
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    // Force an out-of-bounds trait index (99 is far beyond the 16-entry TRAIT_NAMES array).
+    session
+        .set_trait(0, 99)
+        .expect_err("set_trait should reject OOB index");
+
+    // selected_traits() must not emit a placeholder for values that can't be mapped.
+    // Internally the raw slot might hold an invalid value already (e.g. from a modded save);
+    // verify that the builtin path drops it rather than producing "Trait #99".
+    let traits = session.selected_traits();
+    for t in &traits {
+        assert!(
+            t.index < 16,
+            "expected only in-range trait indices, got index {}",
+            t.index
+        );
+    }
 }
 
 #[test]
@@ -959,5 +987,38 @@ fn session_can_apply_character_export_and_emit_modified_bytes_fallout2() {
             .expect("skills should include index 0")
             .raw,
         new_skill_raw
+    );
+}
+
+#[test]
+fn apply_character_rejects_export_with_oob_trait_index() {
+    // Documents the contract: selected_traits_resolved() must never emit OOB trait
+    // indices because apply_character propagates set_trait's bounds-check error.
+    // This test pins that behavior so callers of apply_character know what to expect.
+    let engine = Engine::new();
+    let path = fallout1_save_path(1);
+    let bytes = fs::read(&path).expect("failed to read Fallout 1 fixture");
+    let mut session = engine
+        .open_bytes(&bytes, Some(Game::Fallout1))
+        .expect("failed to open Fallout 1 save");
+
+    let mut export = session.export_character();
+    // Replace all traits with a single OOB entry (index 99 is far beyond the
+    // 16-entry builtin trait list).  Slot 0 will be this OOB index, so
+    // apply_traits_from_export → set_trait(0, 99) must fail.
+    export.traits = vec![TraitEntry {
+        index: 99,
+        name: "Custom Modded Trait".to_string(),
+    }];
+
+    let result = session.apply_character(&export);
+    assert!(
+        result.is_err(),
+        "apply_character should fail when export contains an OOB trait index"
+    );
+    assert_eq!(
+        result.unwrap_err().code,
+        CoreErrorCode::UnsupportedOperation,
+        "error code should be UnsupportedOperation for OOB trait"
     );
 }

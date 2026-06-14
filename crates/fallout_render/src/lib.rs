@@ -157,7 +157,13 @@ pub fn render_json_selected_from_export_with_inventory(
 }
 
 pub fn render_classic_sheet(session: &Session) -> String {
-    render_classic_sheet_with_inventory(session, TextRenderOptions::default(), None, None)
+    render_classic_sheet_with_inventory_and_traits(
+        session,
+        TextRenderOptions::default(),
+        None,
+        None,
+        None,
+    )
 }
 
 pub fn render_text(session: &Session, style: TextStyle) -> String {
@@ -165,7 +171,7 @@ pub fn render_text(session: &Session, style: TextStyle) -> String {
 }
 
 pub fn render_classic_sheet_with_options(session: &Session, options: TextRenderOptions) -> String {
-    render_classic_sheet_with_inventory(session, options, None, None)
+    render_classic_sheet_with_inventory_and_traits(session, options, None, None, None)
 }
 
 pub fn render_classic_sheet_with_inventory_and_traits(
@@ -176,15 +182,6 @@ pub fn render_classic_sheet_with_inventory_and_traits(
     traits: Option<&[TraitEntry]>,
 ) -> String {
     render_classic_sheet_impl(session, options, inventory, total_weight_lbs, traits)
-}
-
-pub fn render_classic_sheet_with_inventory(
-    session: &Session,
-    options: TextRenderOptions,
-    inventory: Option<&[ResolvedInventoryEntry]>,
-    total_weight_lbs: Option<i32>,
-) -> String {
-    render_classic_sheet_impl(session, options, inventory, total_weight_lbs, None)
 }
 
 pub fn render_text_with_options(

@@ -160,7 +160,7 @@ fn load_trait_messages_from_archive(
     let mut candidates: Vec<String> = archive
         .entry_names()
         .into_iter()
-        .filter(|name| name.ends_with("\\trait.msg"))
+        .filter(|name| name.replace('/', "\\").ends_with("\\trait.msg"))
         .collect();
     if candidates.is_empty() {
         return Err(CoreError::new(
@@ -175,8 +175,12 @@ fn load_trait_messages_from_archive(
     candidates.sort_unstable();
     let selected = candidates
         .iter()
-        .find(|name| name.contains("\\english\\game\\"))
-        .or_else(|| candidates.iter().find(|name| name.contains("\\english\\")))
+        .find(|name| name.replace('/', "\\").contains("\\english\\game\\"))
+        .or_else(|| {
+            candidates
+                .iter()
+                .find(|name| name.replace('/', "\\").contains("\\english\\"))
+        })
         .map(String::as_str)
         .unwrap_or(candidates[0].as_str());
     let language = archive_language_from_key(selected).unwrap_or_else(|| "archive".to_string());
@@ -294,6 +298,28 @@ mod tests {
         out.extend_from_slice(&dir_size.to_le_bytes());
         out.extend_from_slice(&file_size.to_le_bytes());
         out
+    }
+
+    #[test]
+    fn loads_trait_names_from_dat_archive_with_forward_slash_keys() {
+        let root = temp_test_dir("trait_catalog_fwdslash");
+        fs::create_dir_all(&root).expect("failed to create temp root");
+        let dat_path = root.join("master.dat");
+
+        // Build DAT with forward-slash path separators instead of backslashes.
+        let dat_bytes = build_f2_dat(vec![(
+            "text/english/game/trait.msg",
+            b"{104}{}{Finesse Fwd}\n{115}{}{Gifted Fwd}\n",
+            false,
+        )]);
+        fs::write(&dat_path, dat_bytes).expect("failed to write test dat");
+
+        let catalog = TraitCatalog::load_from_install_dir(&root)
+            .expect("trait catalog should load from dat archive with forward-slash keys");
+        assert_eq!(catalog.get(4), Some("Finesse Fwd"));
+        assert_eq!(catalog.get(15), Some("Gifted Fwd"));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     fn temp_test_dir(prefix: &str) -> PathBuf {

@@ -1,6 +1,6 @@
 use fallout_core::core_api::{CharacterExport, Engine, Game as CoreGame, Session};
 use fallout_render::{
-    JsonStyle, TextRenderOptions, render_classic_sheet_with_inventory,
+    JsonStyle, TextRenderOptions, render_classic_sheet_with_inventory_and_traits,
     render_json_full_with_inventory,
 };
 use serde::{Deserialize, Serialize};
@@ -118,10 +118,11 @@ fn render_save_text_impl(
         });
     }
 
-    Ok(render_classic_sheet_with_inventory(
+    Ok(render_classic_sheet_with_inventory_and_traits(
         &session,
         TextRenderOptions { verbose: false },
         Some(&resolved_inventory),
+        None,
         None,
     ))
 }

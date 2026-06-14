@@ -6,6 +6,10 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 description = "Core save parsing/query library for Fallout 1 & 2"
+readme.workspace = true
+homepage.workspace = true
+keywords = ["fallout", "save-editor", "game", "rpg", "parser"]
+categories = ["game-development", "parser-implementations"]
 
 [lib]
 name = "fallout_core"

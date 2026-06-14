@@ -345,7 +345,13 @@ impl Document {
 
     pub fn set_hp(&mut self, hp: i32) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Handler(5))?;
-        patch_i32_in_blob(blob, PLAYER_HP_OFFSET_IN_HANDLER5, hp, "handler 5", "hp")?;
+        crate::blob_patch::patch_i32(
+            &mut blob.bytes,
+            PLAYER_HP_OFFSET_IN_HANDLER5,
+            hp,
+            "handler 5",
+            "hp",
+        )?;
         if let object::ObjectData::Critter(ref mut data) = self.save.player_object.object_data {
             data.hp = hp;
         }
@@ -354,8 +360,8 @@ impl Document {
 
     pub fn set_character_name(&mut self, value: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Header)?;
-        patch_fixed_string_in_blob(
-            blob,
+        crate::blob_patch::patch_fixed_string(
+            &mut blob.bytes,
             HEADER_CHARACTER_NAME_OFFSET,
             HEADER_CHARACTER_NAME_LEN,
             value,
@@ -368,8 +374,8 @@ impl Document {
 
     pub fn set_description(&mut self, value: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Header)?;
-        patch_fixed_string_in_blob(
-            blob,
+        crate::blob_patch::patch_fixed_string(
+            &mut blob.bytes,
             HEADER_DESCRIPTION_OFFSET,
             HEADER_DESCRIPTION_LEN,
             value,
@@ -428,7 +434,7 @@ impl Document {
         let critter_data = self.save.critter_data.clone();
         let blob = self.section_blob_mut(SectionId::Handler(6))?;
         let offset = find_skill_offset_in_handler6(&blob.bytes, &critter_data, skill_index)?;
-        patch_i32_in_blob(blob, offset, raw, "handler 6", "skill raw")?;
+        crate::blob_patch::patch_i32(&mut blob.bytes, offset, raw, "handler 6", "skill raw")?;
         self.save.critter_data.skills[skill_index] = raw;
         Ok(())
     }
@@ -505,7 +511,7 @@ impl Document {
 
         let offset = perk_index * I32_WIDTH;
         let blob = self.section_blob_mut(SectionId::Handler(10))?;
-        patch_i32_in_blob(blob, offset, rank, "handler 10", "perk rank")?;
+        crate::blob_patch::patch_i32(&mut blob.bytes, offset, rank, "handler 10", "perk rank")?;
         self.save.perks[perk_index] = rank;
         Ok(())
     }
@@ -645,19 +651,25 @@ impl Document {
         let critter_data = self.save.critter_data.clone();
         let blob = self.section_blob_mut(SectionId::Handler(6))?;
         let offset = find_base_stat_offset_in_handler6(&blob.bytes, &critter_data, stat_index)?;
-        patch_i32_in_blob(blob, offset, raw, "handler 6", field)
+        crate::blob_patch::patch_i32(&mut blob.bytes, offset, raw, "handler 6", field)
     }
 
     fn patch_handler6_experience(&mut self, experience: i32) -> io::Result<()> {
         let critter_data = self.save.critter_data.clone();
         let blob = self.section_blob_mut(SectionId::Handler(6))?;
         let offset = find_experience_offset_in_handler6(&blob.bytes, &critter_data)?;
-        patch_i32_in_blob(blob, offset, experience, "handler 6", "experience")
+        crate::blob_patch::patch_i32(
+            &mut blob.bytes,
+            offset,
+            experience,
+            "handler 6",
+            "experience",
+        )
     }
 
     fn patch_handler13_i32(&mut self, offset: usize, raw: i32, field: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Handler(13))?;
-        patch_i32_in_blob(blob, offset, raw, "handler 13", field)
+        crate::blob_patch::patch_i32(&mut blob.bytes, offset, raw, "handler 13", field)
     }
 
     fn section_blob_mut(&mut self, id: SectionId) -> io::Result<&mut SectionBlob> {
@@ -687,7 +699,7 @@ impl Document {
     fn patch_trait_slot(&mut self, slot: usize, value: i32) -> io::Result<()> {
         let offset = slot * I32_WIDTH;
         let blob = self.section_blob_mut(SectionId::Handler(15))?;
-        patch_i32_in_blob(blob, offset, value, "handler 15", "trait")
+        crate::blob_patch::patch_i32(&mut blob.bytes, offset, value, "handler 15", "trait")
     }
 
     fn rewrite_handler5_from_player_object(&mut self) -> io::Result<()> {
@@ -810,71 +822,6 @@ fn emit_from_blobs(
     }
 
     Ok(out)
-}
-
-fn patch_i32_in_blob(
-    blob: &mut SectionBlob,
-    offset: usize,
-    raw: i32,
-    section_label: &str,
-    field_label: &str,
-) -> io::Result<()> {
-    if blob.bytes.len() < offset + I32_WIDTH {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{section_label} too short for {field_label} patch: len={}, need at least {}",
-                blob.bytes.len(),
-                offset + I32_WIDTH
-            ),
-        ));
-    }
-
-    blob.bytes[offset..offset + I32_WIDTH].copy_from_slice(&raw.to_be_bytes());
-    Ok(())
-}
-
-fn patch_fixed_string_in_blob(
-    blob: &mut SectionBlob,
-    offset: usize,
-    width: usize,
-    value: &str,
-    section_label: &str,
-    field_label: &str,
-) -> io::Result<()> {
-    if value.contains('\0') {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("{field_label} cannot contain NUL characters"),
-        ));
-    }
-
-    let raw = value.as_bytes();
-    if raw.len() > width {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "{field_label} is too long: {} bytes (max {width} bytes)",
-                raw.len()
-            ),
-        ));
-    }
-
-    if blob.bytes.len() < offset + width {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{section_label} too short for {field_label} patch: len={}, need at least {}",
-                blob.bytes.len(),
-                offset + width
-            ),
-        ));
-    }
-
-    let field = &mut blob.bytes[offset..offset + width];
-    field.fill(0);
-    field[..raw.len()].copy_from_slice(raw);
-    Ok(())
 }
 
 fn find_base_stat_offset_in_handler6(

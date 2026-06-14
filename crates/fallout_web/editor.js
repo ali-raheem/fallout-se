@@ -144,6 +144,12 @@ const state = {
 };
 
 let jsonSyncTimer = null;
+let formSyncTimer = null;
+
+function debouncedSyncFormToJson() {
+  clearTimeout(formSyncTimer);
+  formSyncTimer = setTimeout(syncFormToJson, 50);
+}
 
 function setStatus(message, kind = "info") {
   elements.status.textContent = message;
@@ -764,25 +770,28 @@ function wireFormEvents() {
     elements.fiSkillPoints, elements.fiHp, elements.fiKarma, elements.fiReputation,
   ];
   for (const el of coreInputs) {
-    const eventName = el.tagName === "SELECT" ? "change" : "input";
-    el.addEventListener(eventName, () => syncFormToJson());
+    if (el.tagName === "SELECT") {
+      el.addEventListener("change", () => syncFormToJson());
+    } else {
+      el.addEventListener("input", () => debouncedSyncFormToJson());
+    }
   }
 
-  // Trait selects
+  // Trait selects (discrete change events — no debounce needed)
   elements.fiTrait0.addEventListener("change", () => syncFormToJson());
   elements.fiTrait1.addEventListener("change", () => syncFormToJson());
 
   // S.P.E.C.I.A.L. base inputs (delegated)
   elements.specialRows.addEventListener("input", (e) => {
     if (e.target.classList.contains("special-base")) {
-      syncFormToJson();
+      debouncedSyncFormToJson();
     }
   });
 
   // Skill raw inputs (delegated)
   elements.skillRows.addEventListener("input", (e) => {
     if (e.target.classList.contains("skill-raw")) {
-      syncFormToJson();
+      debouncedSyncFormToJson();
     }
   });
 

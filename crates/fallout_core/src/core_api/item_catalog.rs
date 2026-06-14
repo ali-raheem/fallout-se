@@ -328,7 +328,7 @@ fn load_pro_item_messages_from_archive(
     let mut candidates: Vec<String> = archive
         .entry_names()
         .into_iter()
-        .filter(|name| name.ends_with("\\pro_item.msg"))
+        .filter(|name| name.replace('/', "\\").ends_with("\\pro_item.msg"))
         .collect();
     if candidates.is_empty() {
         return Err(CoreError::new(
@@ -343,7 +343,7 @@ fn load_pro_item_messages_from_archive(
     candidates.sort_unstable();
     let selected = candidates
         .iter()
-        .find(|name| name.contains("\\english\\"))
+        .find(|name| name.replace('/', "\\").contains("\\english\\"))
         .map(String::as_str)
         .unwrap_or(candidates[0].as_str());
     let language = archive_language_from_key(selected).unwrap_or_else(|| "archive".to_string());
@@ -988,6 +988,7 @@ mod tests {
     use flate2::write::ZlibEncoder;
 
     use super::DatArchive;
+    use super::ItemCatalog;
     use super::detect_install_dir_from_save_path;
     use super::{PRO_ITEM_MESSAGE_ID_OFFSET, PRO_ITEM_TYPE_OFFSET, PRO_ITEM_WEIGHT_OFFSET};
     use super::{parse_item_proto_record, parse_msg_entries};
@@ -1092,6 +1093,46 @@ mod tests {
         assert_eq!(msg, b"{100}{}{Stimpak}\n");
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn loads_item_names_from_dat_archive_with_forward_slash_keys() {
+        let root = temp_test_dir("item_catalog_fwdslash");
+        fs::create_dir_all(&root).expect("failed to create temp root");
+        let dat_path = root.join("master.dat");
+
+        // Build DAT entries with forward-slash separators instead of backslashes.
+        let proto_bytes = build_proto_record(1, 100, 0, 0);
+        let dat_bytes = build_f2_dat(vec![
+            ("proto/items/items.lst", b"00000001.pro\n", false),
+            ("proto/items/00000001.pro", &proto_bytes, false),
+            (
+                "text/english/game/pro_item.msg",
+                b"{100}{}{Stimpak Fwd}\n",
+                false,
+            ),
+        ]);
+        fs::write(&dat_path, dat_bytes).expect("failed to write test dat");
+
+        let catalog = ItemCatalog::load_from_install_dir(&root)
+            .expect("item catalog should load from dat archive with forward-slash keys");
+        assert_eq!(catalog.language(), "english");
+        let entry = catalog.get(1).expect("item pid=1 should be present");
+        assert_eq!(entry.name, "Stimpak Fwd");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    fn build_proto_record(pid: i32, message_id: i32, item_type: i32, base_weight: i32) -> Vec<u8> {
+        let mut bytes = vec![0u8; 0x30];
+        bytes[0x00..0x04].copy_from_slice(&pid.to_be_bytes());
+        bytes[PRO_ITEM_MESSAGE_ID_OFFSET..PRO_ITEM_MESSAGE_ID_OFFSET + 4]
+            .copy_from_slice(&message_id.to_be_bytes());
+        bytes[PRO_ITEM_TYPE_OFFSET..PRO_ITEM_TYPE_OFFSET + 4]
+            .copy_from_slice(&item_type.to_be_bytes());
+        bytes[PRO_ITEM_WEIGHT_OFFSET..PRO_ITEM_WEIGHT_OFFSET + 4]
+            .copy_from_slice(&base_weight.to_be_bytes());
+        bytes
     }
 
     fn build_f2_dat(entries: Vec<(&str, &[u8], bool)>) -> Vec<u8> {

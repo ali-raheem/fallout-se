@@ -5,7 +5,11 @@ edition.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
-description = "Command-line interface for Fallout save parsing"
+description = "Command-line save viewer and editor for Fallout 1 & 2"
+readme.workspace = true
+homepage.workspace = true
+keywords = ["fallout", "save-editor", "cli", "game", "rpg"]
+categories = ["game-development", "command-line-utilities"]
 
 [[bin]]
 name = "fallout-se"
@@ -13,6 +17,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-fallout_core = { package = "fallout-se-core", version = "0.1.5", path = "../fallout_core" }
-fallout_render = { package = "fallout-se-render", version = "0.1.5", path = "../fallout_render" }
+fallout_core = { package = "fallout-se-core", version = "0.1.6", path = "../fallout_core" }
+fallout_render = { package = "fallout-se-render", version = "0.1.6", path = "../fallout_render" }
 serde_json = "1"

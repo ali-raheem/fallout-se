@@ -350,13 +350,12 @@ impl Session {
         traits
             .iter()
             .filter_map(|&value| usize::try_from(value).ok())
-            .map(|index| {
+            .filter_map(|index| {
                 let name = catalog
-                    .and_then(|catalog| catalog.get(index))
+                    .and_then(|c| c.get(index))
                     .map(str::to_string)
-                    .or_else(|| builtin_names.get(index).copied().map(str::to_string))
-                    .unwrap_or_else(|| format!("Trait #{index}"));
-                TraitEntry { index, name }
+                    .or_else(|| builtin_names.get(index).copied().map(str::to_string))?;
+                Some(TraitEntry { index, name })
             })
             .collect()
     }

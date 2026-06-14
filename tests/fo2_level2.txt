@@ -1,0 +1,37 @@
+
+
+                                  FALLOUT
+                         VAULT-13 PERSONNEL RECORD
+                          25 July 2241  0839 hours
+
+  Name: Clairey            Age: 26               Gender: Female
+ Level: 02                 Exp: 1,200        Next Level: 3,000
+
+       Strength: 05         Hit Points: 006/032         Sequence: 05
+     Perception: 07        Armor Class: 010         Healing Rate: 01
+      Endurance: 04      Action Points: 10       Critical Chance: 006%
+       Charisma: 06       Melee Damage: 01          Carry Weight: 110 lbs.
+   Intelligence: 09        Damage Res.: 000%
+        Agility: 10     Radiation Res.: 008%
+           Luck: 06        Poison Res.: 020%
+
+
+ ::: Traits :::
+  Gifted
+  Small Frame
+
+ ::: Karma :::
+  Karma: 15 (Wanderer)
+
+ ::: Reputation :::
+  Arroyo: Idolized
+
+ ::: Skills :::                ::: Kills :::
+
+
+ ::: Inventory :::
+  1x Scorpion Tail       
+
+                                      Total Weight: 20 lbs.
+
+
