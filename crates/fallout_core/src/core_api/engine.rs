@@ -201,14 +201,14 @@ impl Session {
             self.set_hp(hp)?;
         }
 
-        if let Some(effective_age) = export_age_total(&character.stats) {
-            if Some(effective_age) != export_age_total(&current.stats) {
-                let age_bonus = export_age_bonus(&current.stats).unwrap_or(0);
-                let base_age = effective_age
-                    .saturating_sub(elapsed_game_years(self.snapshot.game_time))
-                    .saturating_sub(age_bonus);
-                self.set_age(base_age)?;
-            }
+        if let Some(effective_age) = export_age_total(&character.stats)
+            && Some(effective_age) != export_age_total(&current.stats)
+        {
+            let age_bonus = export_age_bonus(&current.stats).unwrap_or(0);
+            let base_age = effective_age
+                .saturating_sub(elapsed_game_years(self.snapshot.game_time))
+                .saturating_sub(age_bonus);
+            self.set_age(base_age)?;
         }
 
         if character.traits != current.traits {

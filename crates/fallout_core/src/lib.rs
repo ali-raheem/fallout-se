@@ -1,4 +1,4 @@
-pub(crate) mod blob_patch;
+pub mod common;
 pub mod core_api;
 pub mod fallout1;
 pub mod fallout2;

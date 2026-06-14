@@ -28,6 +28,7 @@ pub fn obj_index_from_pid(pid: i32) -> i32 {
 
 // --- Display name tables ---
 
+#[rustfmt::skip]
 pub const STAT_NAMES: [&str; SAVEABLE_STAT_COUNT] = [
     "Strength",
     "Perception",
@@ -66,6 +67,7 @@ pub const STAT_NAMES: [&str; SAVEABLE_STAT_COUNT] = [
     "Gender",
 ];
 
+#[rustfmt::skip]
 pub const SKILL_NAMES: [&str; SKILL_COUNT] = [
     "Small Guns",
     "Big Guns",
@@ -87,6 +89,7 @@ pub const SKILL_NAMES: [&str; SKILL_COUNT] = [
     "Outdoorsman",
 ];
 
+#[rustfmt::skip]
 pub const PERK_NAMES: [&str; PERK_COUNT] = [
     "Awareness",
     "Bonus HtH Attacks",

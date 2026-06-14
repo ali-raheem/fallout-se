@@ -5,6 +5,8 @@ pub mod types;
 
 use std::io::{self, Cursor, Read, Seek};
 
+use crate::common::blob_patching::SectionBlob;
+use crate::common::{blob_emission, blob_patching, layout_management};
 use crate::gender::Gender;
 use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
 use crate::object::GameObject;
@@ -280,11 +282,6 @@ pub struct Document {
     original_file_len: usize,
 }
 
-#[derive(Debug, Clone)]
-struct SectionBlob {
-    bytes: Vec<u8>,
-}
-
 struct Capture<'a> {
     source: &'a [u8],
     sections: Vec<SectionLayout>,
@@ -359,7 +356,7 @@ impl Document {
     }
 
     pub fn to_bytes_unmodified(&self) -> io::Result<Vec<u8>> {
-        emit_from_blobs(
+        blob_emission::emit_from_blobs(
             &self.original_section_blobs,
             self.original_file_len,
             "unmodified",
@@ -367,14 +364,14 @@ impl Document {
     }
 
     pub fn to_bytes_modified(&self) -> io::Result<Vec<u8>> {
-        self.validate_modified_state()?;
-        emit_from_blobs(&self.section_blobs, self.layout.file_len, "modified")
+        layout_management::validate_modified_state(&self.layout, &self.section_blobs)?;
+        blob_emission::emit_from_blobs(&self.section_blobs, self.layout.file_len, "modified")
     }
 
     pub fn set_hp(&mut self, hp: i32) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Handler(5))?;
-        crate::blob_patch::patch_i32(
-            &mut blob.bytes,
+        blob_patching::patch_i32_in_blob(
+            blob,
             PLAYER_HP_OFFSET_IN_HANDLER5,
             hp,
             "handler 5",
@@ -388,8 +385,8 @@ impl Document {
 
     pub fn set_character_name(&mut self, value: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Header)?;
-        crate::blob_patch::patch_fixed_string(
-            &mut blob.bytes,
+        blob_patching::patch_fixed_string_in_blob(
+            blob,
             HEADER_CHARACTER_NAME_OFFSET,
             HEADER_CHARACTER_NAME_LEN,
             value,
@@ -402,8 +399,8 @@ impl Document {
 
     pub fn set_description(&mut self, value: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Header)?;
-        crate::blob_patch::patch_fixed_string(
-            &mut blob.bytes,
+        blob_patching::patch_fixed_string_in_blob(
+            blob,
             HEADER_DESCRIPTION_OFFSET,
             HEADER_DESCRIPTION_LEN,
             value,
@@ -548,7 +545,7 @@ impl Document {
 
         let offset = perk_index * I32_WIDTH;
         let blob = self.section_blob_mut(SectionId::Handler(10))?;
-        crate::blob_patch::patch_i32(&mut blob.bytes, offset, rank, "handler 10", "perk rank")?;
+        blob_patching::patch_i32_in_blob(blob, offset, rank, "handler 10", "perk rank")?;
         self.save.perks[perk_index] = rank;
         Ok(())
     }
@@ -681,12 +678,12 @@ impl Document {
 
     fn patch_handler6_i32(&mut self, offset: usize, raw: i32, field: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Handler(6))?;
-        crate::blob_patch::patch_i32(&mut blob.bytes, offset, raw, "handler 6", field)
+        blob_patching::patch_i32_in_blob(blob, offset, raw, "handler 6", field)
     }
 
     fn patch_handler13_i32(&mut self, offset: usize, raw: i32, field: &str) -> io::Result<()> {
         let blob = self.section_blob_mut(SectionId::Handler(13))?;
-        crate::blob_patch::patch_i32(&mut blob.bytes, offset, raw, "handler 13", field)
+        blob_patching::patch_i32_in_blob(blob, offset, raw, "handler 13", field)
     }
 
     fn section_blob_mut(&mut self, id: SectionId) -> io::Result<&mut SectionBlob> {
@@ -716,129 +713,20 @@ impl Document {
     fn patch_trait_slot(&mut self, slot: usize, value: i32) -> io::Result<()> {
         let offset = slot * I32_WIDTH;
         let blob = self.section_blob_mut(SectionId::Handler(16))?;
-        crate::blob_patch::patch_i32(&mut blob.bytes, offset, value, "handler 16", "trait")
+        blob_patching::patch_i32_in_blob(blob, offset, value, "handler 16", "trait")
     }
 
     fn rewrite_handler5_from_player_object(&mut self) -> io::Result<()> {
         let mut blob = Vec::new();
         self.save.player_object.emit_to_vec(&mut blob)?;
         blob.extend_from_slice(&self.save.center_tile.to_be_bytes());
-        self.replace_section_blob(SectionId::Handler(5), blob)
+        layout_management::replace_section_blob(
+            &mut self.section_blobs,
+            &mut self.layout,
+            SectionId::Handler(5),
+            blob,
+        )
     }
-
-    fn replace_section_blob(&mut self, id: SectionId, bytes: Vec<u8>) -> io::Result<()> {
-        let section_index = self.section_index(id)?;
-        let section = self.layout.sections.get_mut(section_index).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "section blob list does not match recorded layout",
-            )
-        })?;
-        let old_len = section.range.len();
-        let new_len = bytes.len();
-        section.range.end = section.range.start + new_len;
-
-        if new_len != old_len {
-            if new_len > old_len {
-                let delta = new_len - old_len;
-                for later in self.layout.sections.iter_mut().skip(section_index + 1) {
-                    later.range.start = later.range.start.checked_add(delta).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "section start overflow")
-                    })?;
-                    later.range.end = later.range.end.checked_add(delta).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "section end overflow")
-                    })?;
-                }
-                self.layout.file_len =
-                    self.layout.file_len.checked_add(delta).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "layout file_len overflow")
-                    })?;
-            } else {
-                let delta = old_len - new_len;
-                for later in self.layout.sections.iter_mut().skip(section_index + 1) {
-                    later.range.start = later.range.start.checked_sub(delta).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "section start underflow")
-                    })?;
-                    later.range.end = later.range.end.checked_sub(delta).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "section end underflow")
-                    })?;
-                }
-                self.layout.file_len =
-                    self.layout.file_len.checked_sub(delta).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "layout file_len underflow")
-                    })?;
-            }
-        }
-
-        let slot = self.section_blobs.get_mut(section_index).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "section blob list does not match recorded layout",
-            )
-        })?;
-        slot.bytes = bytes;
-
-        Ok(())
-    }
-
-    fn validate_modified_state(&self) -> io::Result<()> {
-        if self.layout.sections.len() != self.section_blobs.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "layout/blob section count mismatch: {} layout sections, {} blobs",
-                    self.layout.sections.len(),
-                    self.section_blobs.len()
-                ),
-            ));
-        }
-
-        for (idx, (section, blob)) in self
-            .layout
-            .sections
-            .iter()
-            .zip(self.section_blobs.iter())
-            .enumerate()
-        {
-            let expected = section.range.len();
-            let actual = blob.bytes.len();
-            if expected != actual {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "section/blob length mismatch at index {idx} ({:?}): layout={}, blob={}",
-                        section.id, expected, actual
-                    ),
-                ));
-            }
-        }
-
-        self.layout.validate()
-    }
-}
-
-fn emit_from_blobs(
-    blobs: &[SectionBlob],
-    expected_len: usize,
-    mode_label: &str,
-) -> io::Result<Vec<u8>> {
-    let mut out = Vec::with_capacity(expected_len);
-    for blob in blobs {
-        out.extend_from_slice(&blob.bytes);
-    }
-
-    if out.len() != expected_len {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{mode_label} emit length mismatch: got {}, expected {}",
-                out.len(),
-                expected_len
-            ),
-        ));
-    }
-
-    Ok(out)
 }
 
 fn parse_handlers_14_to_16<R: Read + Seek>(

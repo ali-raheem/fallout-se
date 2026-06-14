@@ -2,7 +2,12 @@ use std::io;
 
 const I32_WIDTH: usize = 4;
 
-pub(crate) fn patch_i32(
+#[derive(Debug, Clone)]
+pub struct SectionBlob {
+    pub bytes: Vec<u8>,
+}
+
+pub fn patch_i32(
     bytes: &mut [u8],
     offset: usize,
     raw: i32,
@@ -19,12 +24,11 @@ pub(crate) fn patch_i32(
             ),
         ));
     }
-
     bytes[offset..offset + I32_WIDTH].copy_from_slice(&raw.to_be_bytes());
     Ok(())
 }
 
-pub(crate) fn patch_fixed_string(
+pub fn patch_fixed_string(
     bytes: &mut [u8],
     offset: usize,
     width: usize,
@@ -38,18 +42,13 @@ pub(crate) fn patch_fixed_string(
             format!("{field_label} cannot contain NUL characters"),
         ));
     }
-
     let raw = value.as_bytes();
     if raw.len() > width {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!(
-                "{field_label} is too long: {} bytes (max {width} bytes)",
-                raw.len()
-            ),
+            format!("{field_label} is too long: {} bytes (max {width} bytes)", raw.len()),
         ));
     }
-
     if bytes.len() < offset + width {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -60,18 +59,42 @@ pub(crate) fn patch_fixed_string(
             ),
         ));
     }
-
     let field = &mut bytes[offset..offset + width];
     field.fill(0);
     field[..raw.len()].copy_from_slice(raw);
     Ok(())
 }
 
+pub fn patch_i32_in_blob(
+    blob: &mut SectionBlob,
+    offset: usize,
+    raw: i32,
+    section_label: &str,
+    field_label: &str,
+) -> io::Result<()> {
+    patch_i32(&mut blob.bytes, offset, raw, section_label, field_label)
+}
+
+pub fn patch_fixed_string_in_blob(
+    blob: &mut SectionBlob,
+    offset: usize,
+    width: usize,
+    value: &str,
+    section_label: &str,
+    field_label: &str,
+) -> io::Result<()> {
+    patch_fixed_string(&mut blob.bytes, offset, width, value, section_label, field_label)
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::ErrorKind;
 
-    use super::{patch_fixed_string, patch_i32};
+    use super::{SectionBlob, patch_fixed_string, patch_i32};
+
+    fn blob(bytes: Vec<u8>) -> SectionBlob {
+        SectionBlob { bytes }
+    }
 
     #[test]
     fn patch_i32_writes_big_endian_at_offset() {
@@ -144,5 +167,19 @@ mod tests {
         let err = patch_fixed_string(&mut buf, 3, 4, "x", "sec", "field").unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidData);
         assert!(err.to_string().contains("sec"));
+    }
+
+    #[test]
+    fn patch_i32_in_blob_delegates_to_patch_i32() {
+        let mut b = blob(vec![0u8; 8]);
+        super::patch_i32_in_blob(&mut b, 2, 0x0A0B_0C0D, "sec", "field").unwrap();
+        assert_eq!(&b.bytes[2..6], &[0x0A, 0x0B, 0x0C, 0x0D]);
+    }
+
+    #[test]
+    fn patch_fixed_string_in_blob_delegates_to_patch_fixed_string() {
+        let mut b = blob(vec![0xFFu8; 6]);
+        super::patch_fixed_string_in_blob(&mut b, 1, 4, "hi", "sec", "field").unwrap();
+        assert_eq!(&b.bytes[1..5], b"hi\0\0");
     }
 }
