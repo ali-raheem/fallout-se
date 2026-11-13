@@ -3,7 +3,9 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fallout_core::core_api::{CharacterExport, CoreErrorCode, Engine, Game, TraitCatalog, TraitEntry};
+use fallout_core::core_api::{
+    CharacterExport, CoreErrorCode, Engine, Game, TraitCatalog, TraitEntry,
+};
 use fallout_core::gender::Gender;
 use fallout_core::{fallout1, fallout2};
 
@@ -354,7 +356,7 @@ fn session_query_methods_match_fallout2_save_data() {
         assert_eq!(skill.tag_bonus, save.skill_tag_bonus(skill.index));
         assert_eq!(skill.bonus, skill.total - skill.raw);
     }
-    assert_eq!(tagged_indices, vec![0, 4, 5]);
+    assert_eq!(tagged_indices, vec![4, 0, 5]);
 
     let perks = session.active_perks();
     let expected_perks = save.perks.iter().filter(|&&rank| rank > 0).count();
@@ -379,8 +381,8 @@ fn session_query_methods_match_fallout2_save_data() {
     let kills = session.nonzero_kill_counts();
     let expected_kills = save.kill_counts.iter().filter(|&&count| count > 0).count();
     assert_eq!(kills.len(), expected_kills);
-    assert!(kills.iter().any(|k| k.index == 7 && k.count == 2));
-    assert!(kills.iter().any(|k| k.index == 18 && k.count == 2));
+    assert!(kills.iter().any(|k| k.index == 6 && k.count == 2));
+    assert!(kills.iter().any(|k| k.index == 17 && k.count == 2));
 
     assert_eq!(session.map_files(), save.map_files);
 }

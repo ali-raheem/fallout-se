@@ -160,6 +160,7 @@ pub struct CritterProtoData {
     pub body_type: i32,
     pub experience: i32,
     pub kill_type: i32,
+    pub damage_type: i32,
 }
 
 pub fn parse_critter_proto<R: Read + Seek>(
@@ -173,6 +174,7 @@ pub fn parse_critter_proto<R: Read + Seek>(
     let body_type = r.read_i32()?;
     let experience = r.read_i32()?;
     let kill_type = r.read_i32()?;
+    let damage_type = r.read_i32()?;
 
     Ok(CritterProtoData {
         sneak_working,
@@ -183,6 +185,7 @@ pub fn parse_critter_proto<R: Read + Seek>(
         body_type,
         experience,
         kill_type,
+        damage_type,
     })
 }
 
@@ -213,7 +216,7 @@ pub fn parse_critter_proto_nearby<R: Read + Seek>(
             guessed_pos + delta as u64
         };
 
-        if pos + 372 > file_len {
+        if pos + 376 > file_len {
             continue;
         }
 
@@ -433,6 +436,19 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
                 Err(_) => continue,
             };
 
+            if std::env::var_os("FALLOUT_LAYOUT_DEBUG").is_some() {
+                eprintln!(
+                    "[LAYOUT] party={} ai={} score={} level={} xp={} traits={:?} difficulty={}",
+                    party_member_count,
+                    ai_packet_count,
+                    score,
+                    pc_stats.level,
+                    pc_stats.experience,
+                    post_pc.selected_traits,
+                    post_pc.game_difficulty
+                );
+            }
+
             if score > best_score {
                 best_score = score;
                 best_party_count = party_member_count;
@@ -637,8 +653,7 @@ fn score_post_tagged_candidate(
     }
 
     let mut score = 50;
-    score -= (party_member_count as i32) / 4;
-    score -= (ai_packet_count as i32) / 2;
+    // EXPERIMENT: size penalties disabled
 
     if ai_packet_count <= party_member_count {
         score += 4;

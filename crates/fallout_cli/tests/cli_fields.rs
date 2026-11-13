@@ -69,7 +69,7 @@ fn cli_prints_multiple_requested_fields_in_fixed_order() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines, vec!["gender=Male", "level=1", "xp=1"]);
+    assert_eq!(lines, vec!["gender=Male", "level=1", "xp=170"]);
 }
 
 #[test]
@@ -306,7 +306,7 @@ fn cli_outputs_selected_fields_as_json() {
     let json: Value = serde_json::from_str(&stdout).expect("stdout should be valid JSON");
     assert_eq!(json["gender"], "Male");
     assert_eq!(json["level"], 1);
-    assert_eq!(json["xp"], 1);
+    assert_eq!(json["xp"], 170);
     assert!(json.get("name").is_none());
 }
 

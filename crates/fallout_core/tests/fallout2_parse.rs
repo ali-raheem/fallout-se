@@ -62,14 +62,14 @@ fn parse_slot01_core_sections() {
             .all(|&s| s == -1 || (0..18).contains(&s))
     );
 
-    assert_eq!(save.kill_counts[7], 2); // Rat
-    assert_eq!(save.kill_counts[18], 2); // Big Bad Boss
+    assert_eq!(save.kill_counts[6], 2); // Rat
+    assert_eq!(save.kill_counts[17], 2); // Big Bad Boss
 
     assert_eq!(save.pc_stats.level, 1);
-    assert_eq!(save.pc_stats.experience, 1);
+    assert_eq!(save.pc_stats.experience, 170);
     assert_eq!(save.pc_stats.unspent_skill_points, 0);
     assert_eq!(save.pc_stats.reputation, 0);
-    assert_eq!(save.pc_stats.karma, 1);
+    assert_eq!(save.pc_stats.karma, 0);
 
     assert!(save.party_member_count > 0);
     assert!(save.ai_packet_count <= save.party_member_count);
@@ -108,16 +108,16 @@ fn parse_slot02_core_sections() {
     assert_eq!(save.critter_data.base_stats[4], 7);
     assert_eq!(save.gender, Gender::Female);
 
-    assert!(save.tagged_skills.contains(&0));
+    assert_eq!(&save.tagged_skills[..3], &[14, 15, 6]);
     assert!(save.tagged_skills.contains(&6));
     assert!(save.tagged_skills.contains(&14));
     assert!(save.tagged_skills.contains(&15));
 
     assert_eq!(save.pc_stats.level, 1);
-    assert_eq!(save.pc_stats.experience, 1);
+    assert_eq!(save.pc_stats.experience, 0);
     assert_eq!(save.pc_stats.unspent_skill_points, 0);
     assert_eq!(save.pc_stats.reputation, 0);
-    assert_eq!(save.pc_stats.karma, 1);
+    assert_eq!(save.pc_stats.karma, 0);
 
     assert!(save.party_member_count > 0);
     assert!(save.ai_packet_count <= save.party_member_count);
