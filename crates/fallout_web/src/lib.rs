@@ -439,3 +439,93 @@ mod tests {
         fs::read(full_path).expect("fixture bytes should be readable")
     }
 }
+
+/// Browser-owned immutable RPU snapshot; platform-specific exporters are not used.
+#[wasm_bindgen]
+pub struct RpuQuantityEditor {
+    inner: fallout_core::core_api::browser_rpu::BrowserInventory,
+    receipt: Option<String>,
+}
+
+#[wasm_bindgen]
+impl RpuQuantityEditor {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        save: &[u8],
+        rpu: &[u8],
+        master: &[u8],
+        overlays_json: &str,
+        sfallfs: &[u8],
+        declaration_json: &str,
+    ) -> Result<RpuQuantityEditor, JsValue> {
+        use fallout_core::core_api::browser_rpu::{
+            BrowserInventory, ResourceDeclaration, SavedOverlay,
+        };
+        if save.len() > 64 * 1024 * 1024
+            || rpu.len() > 512 * 1024 * 1024
+            || master.len() > 512 * 1024 * 1024
+        {
+            return Err(JsValue::from_str("Save/archive upload budget exceeded"));
+        }
+        if overlays_json.len() > 128_000_000 || declaration_json.len() > 65536 {
+            return Err(JsValue::from_str(
+                "Resource declaration/overlays exceed upload limits",
+            ));
+        }
+        let overlays: Vec<SavedOverlay> = serde_json::from_str(overlays_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid saved overlay list: {e}")))?;
+        let declaration: ResourceDeclaration = serde_json::from_str(declaration_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid resource declaration: {e}")))?;
+        let inner = BrowserInventory::open(
+            save.to_vec(),
+            rpu.to_vec(),
+            master.to_vec(),
+            overlays,
+            sfallfs,
+            declaration,
+        )
+        .map_err(|e| JsValue::from_str(&e))?;
+        Ok(Self {
+            inner,
+            receipt: None,
+        })
+    }
+
+    pub fn inspect(&self) -> Result<String, JsValue> {
+        serde_json::to_string_pretty(&self.inner.inspect())
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn edit(&mut self, selection_json: &str, quantity: &str) -> Result<Vec<u8>, JsValue> {
+        self.receipt = None;
+        if selection_json.len() > 65536 || quantity.len() > 32 {
+            return Err(JsValue::from_str("Selection/quantity input exceeds limit"));
+        }
+        // Parse text before any integer coercion by JS/wasm-bindgen.
+        if quantity.is_empty() || !quantity.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(JsValue::from_str(
+                "Quantity must contain decimal digits only",
+            ));
+        }
+        let quantity: i32 = quantity
+            .parse()
+            .map_err(|_| JsValue::from_str("Quantity exceeds 2147483647"))?;
+        let selection = serde_json::from_str(selection_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid selection: {e}")))?;
+        let (bytes, receipt) = self
+            .inner
+            .edit(selection, quantity)
+            .map_err(|e| JsValue::from_str(&e))?;
+        self.receipt = Some(
+            serde_json::to_string_pretty(&receipt)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?,
+        );
+        Ok(bytes)
+    }
+
+    pub fn receipt(&self) -> Result<String, JsValue> {
+        self.receipt
+            .clone()
+            .ok_or_else(|| JsValue::from_str("No verified edit is available"))
+    }
+}

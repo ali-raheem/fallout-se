@@ -6,6 +6,7 @@ pub mod types;
 use std::io::{self, Cursor, Read, Seek};
 
 use crate::common::blob_patching::SectionBlob;
+use crate::common::derived_i32;
 use crate::common::{blob_emission, blob_patching, layout_management};
 use crate::gender::Gender;
 use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
@@ -120,7 +121,7 @@ const SKILL_FORMULAS: [SkillFormula; SKILL_COUNT] = [
     SkillFormula { default_value:  5, stat_modifier: 1, stat1: STAT_ENDURANCE,    stat2: STAT_INTELLIGENCE as i32,        points_modifier: 1 }, // Outdoorsman
 ];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SaveGame {
     pub header: SaveHeader,
     pub player_combat_id: i32,
@@ -140,28 +141,31 @@ pub struct SaveGame {
 
 impl SaveGame {
     /// Compute the effective (displayed) skill value, matching fallout1-ce skill_level().
+    /// Use wide intermediates and saturate the result to i32 after the display cap.
     pub fn effective_skill_value(&self, skill_index: usize) -> i32 {
         if skill_index >= SKILL_COUNT {
             return 0;
         }
 
         let formula = SKILL_FORMULAS[skill_index];
-        let points = self.critter_data.skills[skill_index];
+        let points = i128::from(self.critter_data.skills[skill_index]);
 
         // Stat bonus: F1 uses (stat1+stat2)*mod/2 when two stats are involved
         let stat_bonus = if formula.stat2 != STAT_INVALID {
             (self.total_stat(formula.stat1) + self.total_stat(formula.stat2 as usize))
-                * formula.stat_modifier
+                * i128::from(formula.stat_modifier)
                 / 2
         } else {
-            self.total_stat(formula.stat1) * formula.stat_modifier
+            self.total_stat(formula.stat1) * i128::from(formula.stat_modifier)
         };
 
-        let mut value = formula.default_value + stat_bonus + points * formula.points_modifier;
+        let mut value = i128::from(formula.default_value)
+            + stat_bonus
+            + points * i128::from(formula.points_modifier);
 
         // Tagged skills get +20 and double the points contribution
         if self.is_skill_tagged(skill_index) {
-            value += 20 + points * formula.points_modifier;
+            value += 20 + points * i128::from(formula.points_modifier);
 
             // If the Tag! perk granted the 4th tag slot, that tag doesn't get the +20
             let has_tag_perk = self.has_perk_rank(PERK_TAG);
@@ -170,32 +174,34 @@ impl SaveGame {
             }
         }
 
-        value += self.trait_skill_modifier(skill_index);
-        value += self.perk_skill_modifier(skill_index);
+        value += i128::from(self.trait_skill_modifier(skill_index));
+        value += i128::from(self.perk_skill_modifier(skill_index));
 
-        value.min(200)
+        derived_i32(value.min(200))
     }
 
     /// Return only the contribution from tagging logic for one skill.
+    /// Out-of-range derived results saturate to i32 bounds; raw data is unchanged.
     pub fn skill_tag_bonus(&self, skill_index: usize) -> i32 {
         if skill_index >= SKILL_COUNT || !self.is_skill_tagged(skill_index) {
             return 0;
         }
 
         let formula = SKILL_FORMULAS[skill_index];
-        let points = self.critter_data.skills[skill_index];
-        let mut bonus = points * formula.points_modifier;
+        let points = i128::from(self.critter_data.skills[skill_index]);
+        let mut bonus = points * i128::from(formula.points_modifier);
 
         let has_tag_perk = self.has_perk_rank(PERK_TAG);
         if !has_tag_perk || skill_index as i32 != self.tagged_skills[3] {
             bonus += 20;
         }
 
-        bonus
+        derived_i32(bonus)
     }
 
-    fn total_stat(&self, stat_index: usize) -> i32 {
-        self.critter_data.base_stats[stat_index] + self.critter_data.bonus_stats[stat_index]
+    fn total_stat(&self, stat_index: usize) -> i128 {
+        i128::from(self.critter_data.base_stats[stat_index])
+            + i128::from(self.critter_data.bonus_stats[stat_index])
     }
 
     fn is_skill_tagged(&self, skill_index: usize) -> bool {
@@ -273,7 +279,7 @@ impl SaveGame {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Document {
     pub save: SaveGame,
     layout: FileLayout,

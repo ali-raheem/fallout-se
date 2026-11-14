@@ -179,13 +179,13 @@ pub fn parse_perks<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Result<[i3
 
 // --- Handler 11: Combat State ---
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CombatState {
     pub combat_state_flags: u32,
     pub combat_data: Option<CombatData>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CombatData {
     pub turn_running: i32,
     pub free_move: i32,
@@ -234,7 +234,7 @@ pub fn parse_combat_state<R: Read + Seek>(r: &mut BigEndianReader<R>) -> io::Res
 
 // --- Handler 13: PC Stats ---
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PcStats {
     pub unspent_skill_points: i32,
     pub level: i32,

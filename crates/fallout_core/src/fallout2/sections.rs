@@ -387,6 +387,7 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
     let file_len = r.len()?;
 
     let mut best_score = i32::MIN;
+    let mut best_score_candidate_count = 0usize;
     let mut best_party_count = 0usize;
     let mut best_ai_packet_count = 0usize;
     let mut best_combat_state: Option<CombatState> = None;
@@ -406,11 +407,34 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
         };
         let after_combat_pos = r.position()?;
 
+        let mut ai_range_violations = 0usize;
+
         for ai_packet_count in 0..=party_member_count {
             let pc_stats_pos =
                 after_combat_pos + (ai_packet_count * AI_PACKET_INT_COUNT * 4) as u64;
             if pc_stats_pos + 32 > file_len {
                 break;
+            }
+
+            if ai_packet_count > 0 {
+                let previous_packet_pos =
+                    after_combat_pos + ((ai_packet_count - 1) * AI_PACKET_INT_COUNT * 4) as u64;
+
+                r.seek_to(previous_packet_pos)?;
+
+                let packet = match parse_ai_packet(r) {
+                    Ok(packet) => packet,
+                    Err(_) => break,
+                };
+
+                ai_range_violations += ai_packet_range_violations(&packet);
+            }
+
+            if std::env::var_os("FALLOUT_LAYOUT_DEBUG").is_some() {
+                eprintln!(
+                    "[AI] party={} packets={} range_violations={}",
+                    party_member_count, ai_packet_count, ai_range_violations
+                );
             }
 
             r.seek_to(pc_stats_pos)?;
@@ -449,12 +473,29 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
                 );
             }
 
+            if score == i32::MIN {
+                continue;
+            }
+
+            if ai_range_violations > 0 {
+                if std::env::var_os("FALLOUT_LAYOUT_DEBUG").is_some() {
+                    eprintln!(
+                        "[LAYOUT-REJECT] party={} ai={} score={} ai_range_violations={}",
+                        party_member_count, ai_packet_count, score, ai_range_violations
+                    );
+                }
+                continue;
+            }
+
             if score > best_score {
                 best_score = score;
+                best_score_candidate_count = 1;
                 best_party_count = party_member_count;
                 best_ai_packet_count = ai_packet_count;
                 best_combat_state = Some(combat_state.clone());
                 best_pc_stats = Some(pc_stats.clone());
+            } else if score == best_score {
+                best_score_candidate_count += 1;
             }
         }
     }
@@ -468,6 +509,15 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
 
     // Replay the winning path to leave stream correctly positioned
     // after handler 13.
+    if best_score_candidate_count != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "ambiguous Fallout 2 layout: {} candidates share score {}",
+                best_score_candidate_count, best_score
+            ),
+        ));
+    }
     r.seek_to(start_pos)?;
     let perks = parse_perks(r, best_party_count)?;
     let h10_end = r.position()?;
@@ -475,7 +525,9 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
     let combat_state = parse_combat_state(r)?;
     let h11_end = r.position()?;
 
-    r.skip((best_ai_packet_count * AI_PACKET_INT_COUNT * 4) as u64)?;
+    for _ in 0..best_ai_packet_count {
+        let _packet = parse_ai_packet(r)?;
+    }
     let h12_end = r.position()?;
 
     let pc_stats = parse_pc_stats(r)?;
@@ -505,6 +557,11 @@ pub fn parse_post_tagged_sections<R: Read + Seek>(
     })
 }
 
+fn parse_ai_packet<R: Read + Seek>(
+    r: &mut BigEndianReader<R>,
+) -> io::Result<[i32; AI_PACKET_INT_COUNT]> {
+    r.read_i32_array::<AI_PACKET_INT_COUNT>()
+}
 fn parse_perks<R: Read + Seek>(
     r: &mut BigEndianReader<R>,
     party_member_count: usize,
@@ -625,6 +682,16 @@ fn parse_post_pc_sections<R: Read + Seek>(
         selected_traits: [trait1, trait2],
         game_difficulty,
     })
+}
+
+fn ai_packet_range_violations(packet: &[i32; AI_PACKET_INT_COUNT]) -> usize {
+    (0..12)
+        .filter(|&index| {
+            let start = packet[12 + index * 2];
+            let end = packet[13 + index * 2];
+            start > end
+        })
+        .count()
 }
 
 fn score_post_tagged_candidate(

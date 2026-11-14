@@ -6,6 +6,7 @@ pub mod types;
 use std::io::{self, Cursor, Read, Seek};
 
 use crate::common::blob_patching::SectionBlob;
+use crate::common::derived_i32;
 use crate::common::{blob_emission, blob_patching, layout_management};
 use crate::gender::Gender;
 use crate::layout::{ByteRange, FileLayout, SectionId, SectionLayout};
@@ -222,7 +223,7 @@ const SKILL_FORMULAS: [SkillFormula; SKILL_COUNT] = [
     },
 ];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SaveGame {
     pub header: SaveHeader,
     pub player_combat_id: i32,
@@ -245,7 +246,7 @@ pub struct SaveGame {
     pub layout_detection_score: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Document {
     pub save: SaveGame,
     layout: FileLayout,
@@ -277,6 +278,44 @@ impl<'a> Capture<'a> {
         self.blobs.push(SectionBlob {
             bytes: self.source[start..end].to_vec(),
         });
+    }
+}
+
+#[cfg(test)]
+mod experience_tests {
+    use super::*;
+
+    #[test]
+    fn second_experience_patch_failure_preserves_document() {
+        let original = include_bytes!("../../../../tests/fallout2_examples/SLOT01/SAVE.DAT");
+        let mut doc = Document::parse_with_layout(Cursor::new(original)).unwrap();
+        doc.set_experience(12_345).unwrap();
+
+        // Keep the layout serializable, but make handler 13 too short for XP.
+        // This injects a private failure state without changing any fixture.
+        layout_management::replace_section_blob(
+            &mut doc.section_blobs,
+            &mut doc.layout,
+            SectionId::Handler(13),
+            vec![0; PC_STATS_EXPERIENCE_OFFSET],
+        )
+        .unwrap();
+        let before_blobs: Vec<_> = doc.section_blobs.iter().map(|b| b.bytes.clone()).collect();
+        let before_modified = doc.to_bytes_modified().unwrap();
+        let before_original = doc.to_bytes_unmodified().unwrap();
+        let before_critter_xp = doc.save.critter_data.experience;
+        let before_pc_xp = doc.save.pc_stats.experience;
+
+        let error = doc.set_experience(54_321).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("handler 13 too short"));
+        assert_eq!(doc.save.critter_data.experience, before_critter_xp);
+        assert_eq!(doc.save.pc_stats.experience, before_pc_xp);
+        for (index, blob) in doc.section_blobs.iter().enumerate() {
+            assert_eq!(blob.bytes, before_blobs[index], "section {index} changed");
+        }
+        assert!(doc.to_bytes_modified().unwrap() == before_modified);
+        assert!(doc.to_bytes_unmodified().unwrap() == before_original);
     }
 }
 
@@ -410,8 +449,33 @@ impl Document {
     }
 
     pub fn set_experience(&mut self, experience: i32) -> io::Result<()> {
-        self.patch_handler6_experience(experience)?;
-        self.patch_handler13_i32(PC_STATS_EXPERIENCE_OFFSET, experience, "experience")?;
+        // Prepare both patches on owned copies; any error leaves the document intact.
+        let prepare_blob = |id| -> io::Result<(usize, SectionBlob)> {
+            let index = self.section_index(id)?;
+            let blob = self.section_blobs.get(index).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "section blob list does not match recorded layout",
+                )
+            })?;
+            Ok((index, blob.clone()))
+        };
+        let (h6_index, mut h6) = prepare_blob(SectionId::Handler(6))?;
+        let offset = find_experience_offset_in_handler6(&h6.bytes, &self.save.critter_data)?;
+        blob_patching::patch_i32_in_blob(&mut h6, offset, experience, "handler 6", "experience")?;
+
+        let (h13_index, mut h13) = prepare_blob(SectionId::Handler(13))?;
+        blob_patching::patch_i32_in_blob(
+            &mut h13,
+            PC_STATS_EXPERIENCE_OFFSET,
+            experience,
+            "handler 13",
+            "experience",
+        )?;
+
+        // Both indices and patches are validated; commit without fallible operations.
+        self.section_blobs[h6_index] = h6;
+        self.section_blobs[h13_index] = h13;
         self.save.critter_data.experience = experience;
         self.save.pc_stats.experience = experience;
         Ok(())
@@ -649,13 +713,6 @@ impl Document {
         let blob = self.section_blob_mut(SectionId::Handler(6))?;
         let offset = find_base_stat_offset_in_handler6(&blob.bytes, &critter_data, stat_index)?;
         blob_patching::patch_i32_in_blob(blob, offset, raw, "handler 6", field)
-    }
-
-    fn patch_handler6_experience(&mut self, experience: i32) -> io::Result<()> {
-        let critter_data = self.save.critter_data.clone();
-        let blob = self.section_blob_mut(SectionId::Handler(6))?;
-        let offset = find_experience_offset_in_handler6(&blob.bytes, &critter_data)?;
-        blob_patching::patch_i32_in_blob(blob, offset, experience, "handler 6", "experience")
     }
 
     fn patch_handler13_i32(&mut self, offset: usize, raw: i32, field: &str) -> io::Result<()> {
@@ -975,6 +1032,8 @@ fn parse_internal<R: Read + Seek>(
 }
 
 impl SaveGame {
+    /// Compute with wide intermediates, preserving the existing display cap and
+    /// saturating the final i32 result without changing raw skill or stat values.
     pub fn effective_skill_value(&self, skill_index: usize) -> i32 {
         if skill_index >= SKILL_COUNT {
             return 0;
@@ -986,13 +1045,13 @@ impl SaveGame {
             stat_sum += self.total_stat(formula.stat2 as usize);
         }
 
-        let base_value = self.critter_data.skills[skill_index];
-        let mut value = formula.default_value
-            + formula.stat_modifier * stat_sum
-            + base_value * formula.base_value_mult;
+        let base_value = i128::from(self.critter_data.skills[skill_index]);
+        let mut value = i128::from(formula.default_value)
+            + i128::from(formula.stat_modifier) * stat_sum
+            + base_value * i128::from(formula.base_value_mult);
 
         if self.is_skill_tagged(skill_index) {
-            value += base_value * formula.base_value_mult;
+            value += base_value * i128::from(formula.base_value_mult);
 
             let has_tag_perk = self.has_perk_rank(PERK_TAG);
             if !has_tag_perk || skill_index as i32 != self.tagged_skills[3] {
@@ -1000,37 +1059,39 @@ impl SaveGame {
             }
         }
 
-        value += self.trait_skill_modifier(skill_index);
-        value += self.perk_skill_modifier(skill_index);
-        value += self.game_difficulty_skill_modifier(skill_index);
+        value += i128::from(self.trait_skill_modifier(skill_index));
+        value += i128::from(self.perk_skill_modifier(skill_index));
+        value += i128::from(self.game_difficulty_skill_modifier(skill_index));
 
         if value > 300 {
             value = 300;
         }
 
-        value
+        derived_i32(value)
     }
 
     /// Return only the contribution from tagging logic for one skill.
+    /// Out-of-range derived results saturate to i32 bounds; raw data is unchanged.
     pub fn skill_tag_bonus(&self, skill_index: usize) -> i32 {
         if skill_index >= SKILL_COUNT || !self.is_skill_tagged(skill_index) {
             return 0;
         }
 
         let formula = SKILL_FORMULAS[skill_index];
-        let base_value = self.critter_data.skills[skill_index];
-        let mut bonus = base_value * formula.base_value_mult;
+        let base_value = i128::from(self.critter_data.skills[skill_index]);
+        let mut bonus = base_value * i128::from(formula.base_value_mult);
 
         let has_tag_perk = self.has_perk_rank(PERK_TAG);
         if !has_tag_perk || skill_index as i32 != self.tagged_skills[3] {
             bonus += 20;
         }
 
-        bonus
+        derived_i32(bonus)
     }
 
-    fn total_stat(&self, stat_index: usize) -> i32 {
-        self.critter_data.base_stats[stat_index] + self.critter_data.bonus_stats[stat_index]
+    fn total_stat(&self, stat_index: usize) -> i128 {
+        i128::from(self.critter_data.base_stats[stat_index])
+            + i128::from(self.critter_data.bonus_stats[stat_index])
     }
 
     fn is_skill_tagged(&self, skill_index: usize) -> bool {

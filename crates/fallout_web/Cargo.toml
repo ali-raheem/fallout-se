@@ -13,7 +13,7 @@ name = "fallout_web"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-fallout_core = { package = "fallout-se-core", version = "0.1.6", path = "../fallout_core" }
+fallout_core = { package = "fallout-se-core", version = "0.1.6", path = "../fallout_core", features = ["experimental-rpu-browser"] }
 fallout_render = { package = "fallout-se-render", version = "0.1.6", path = "../fallout_render" }
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"

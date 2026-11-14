@@ -1,3 +1,4 @@
+import { wireRpuPanel } from "./rpu-editor.js";
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
 const WASM_BUNDLE_BASENAME = "fallout-se-web";
 const GAME_TIME_TICKS_PER_YEAR = 315_360_000;
@@ -877,6 +878,16 @@ async function main() {
 
   try {
     await initWasm();
+    wireRpuPanel(wasmBindings);
+    const rpuPanel = document.getElementById("rpu-panel");
+    rpuPanel.addEventListener("toggle", () => {
+      if (rpuPanel.open) resetEditor();
+      for (const element of [document.querySelector(".toolbar"), document.getElementById("form-editor"),
+        document.querySelector('.editor-wrap[aria-label="editable json"]')]) {
+        element.inert = rpuPanel.open;
+      }
+      setStatus(rpuPanel.open ? "Experimental RPU mode: use the separate verified quantity panel above." : "Drop a SAVE.DAT file to begin legacy editing.", "info");
+    });
     setStatus("Drop a SAVE.DAT file to begin editing.", "info");
   } catch (error) {
     const message = extractErrorMessage(error);

@@ -11,7 +11,7 @@ pub fn obj_type_from_pid(pid: i32) -> i32 {
     (pid >> 24) & 0x0F
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GameObject {
     pub id: i32,
     pub tile: i32,
@@ -37,7 +37,7 @@ pub struct GameObject {
     pub inventory: Vec<InventoryItem>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ObjectData {
     Critter(CritterObjectData),
     Item(ItemObjectData),
@@ -46,7 +46,7 @@ pub enum ObjectData {
     Other,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CritterObjectData {
     pub field_0: i32,
     pub damage_last_turn: i32,
@@ -61,19 +61,19 @@ pub struct CritterObjectData {
     pub poison: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ItemObjectData {
     pub flags: i32,
     pub extra_bytes: u8, // 0, 4, or 8
     pub extra_data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SceneryObjectData {
     pub flags: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MiscObjectData {
     pub map: i32,
     pub tile: i32,
@@ -81,7 +81,7 @@ pub struct MiscObjectData {
     pub rotation: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InventoryItem {
     pub quantity: i32,
     pub object: GameObject,

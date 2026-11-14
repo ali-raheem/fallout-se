@@ -4,7 +4,7 @@ use crate::reader::BigEndianReader;
 
 use super::types::{HEADER_PADDING, PREVIEW_SIZE, SIGNATURE};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SaveHeader {
     pub character_name: String,
     pub description: String,

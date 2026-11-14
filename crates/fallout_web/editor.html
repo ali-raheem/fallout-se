@@ -330,6 +330,13 @@
           min-height: 300px;
         }
       }
+      #rpu-panel a { color: var(--accent); }
+      #rpu-controls { display: grid; gap: 12px; border: 1px solid var(--panel-border); }
+      #rpu-controls label { display: block; line-height: 1.6; }
+      #rpu-rows { overflow-x: auto; }
+      #rpu-rows table { width: 100%; border-collapse: collapse; }
+      #rpu-rows th, #rpu-rows td { text-align: left; padding: 8px; border-bottom: 1px solid var(--panel-border); }
+      #rpu-evidence { max-height: 240px; overflow: auto; }
     </style>
   </head>
   <body>
@@ -353,6 +360,36 @@
           </a>
         </p>
       </header>
+
+      <section class="editor-wrap" aria-label="Experimental RPU quantity editor">
+        <details id="rpu-panel">
+          <summary>Experimental Fallout 2 RPU quantity editor</summary>
+          <p>Edit one exact inventory object using uploaded resources. Files stay in this browser.
+            This mode does not use the legacy editor below. Each export starts from the uploaded snapshot.
+            Prototype filenames and types are shown; localized item names are not resolved in this MVP.</p>
+          <fieldset id="rpu-controls" disabled>
+            <label>Complete save-slot folder <input id="rpu-slot" type="file" webkitdirectory multiple /></label>
+            <label>RPU archive (rpu.dat) <input id="rpu-archive" type="file" accept=".dat" /></label>
+            <label>Base archive (master.dat) <input id="rpu-master" type="file" accept=".dat" /></label>
+            <label>Resource declaration JSON <input id="rpu-plan" type="file" accept=".json" /></label>
+            <p><a href="rpu-resource-declaration.example.json" download>Download resource declaration example</a>.
+              Supply trusted expected SHA-256 hashes and describe your selected offline environment.
+              Archives are resolved rpu.dat first, master.dat second, plus all uploaded saved item prototypes.</p>
+            <label><input id="rpu-consent" type="checkbox" /> I supplied the complete slot and accept this explicitly declared offline environment.
+              Runtime mount order, other mods, loose overrides and hooks are not authenticated or simulated.</label>
+            <p><button id="rpu-inspect" type="button">Inspect RPU inventory</button></p>
+            <div id="rpu-rows" aria-label="Verified inventory objects"></div>
+            <label>New quantity (1-2147483647) <input id="rpu-quantity" type="text" inputmode="numeric" autocomplete="off" /></label>
+            <p><button id="rpu-apply" type="button" disabled>Verify quantity edit</button>
+              <button id="rpu-download" type="button" disabled>Download edited SAVE.DAT</button>
+              <button id="rpu-receipt" type="button" disabled>Download verification receipt</button></p>
+          </fieldset>
+          <p id="rpu-status" role="status" aria-live="polite">Waiting for WASM.</p>
+          <pre id="rpu-evidence" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+          <p class="risk">Browser downloads cannot guarantee filesystem no-overwrite protection.
+            Keep the original and all companion files. Download to a separate location; never choose an existing save or live game slot.</p>
+        </details>
+      </section>
 
       <section class="toolbar" aria-label="editor controls">
         <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Drop SAVE.DAT here">

@@ -111,6 +111,7 @@ pub struct StatEntry {
     pub name: String,
     pub base: i32,
     pub bonus: i32,
+    /// Derived total, saturated to i32 bounds; base and bonus stay raw.
     pub total: i32,
 }
 
@@ -120,8 +121,11 @@ pub struct SkillEntry {
     pub index: usize,
     pub name: String,
     pub raw: i32,
+    /// Derived tag contribution, saturated to i32 bounds.
     pub tag_bonus: i32,
+    /// Displayed total minus raw, independently saturated to i32 bounds.
     pub bonus: i32,
+    /// Derived skill with existing game display cap, saturated to i32 bounds.
     pub total: i32,
 }
 

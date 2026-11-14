@@ -1,0 +1,6 @@
+{
+  "rpu_sha256": "27db830e0fb67d02b60e166e2acb772a92292f5f4dd88f733b740b406a0864ee",
+  "master_sha256": "9b096d3035edafd4077deeb8ee7877a803b9db98497aa4596624b5c058a84711",
+  "assertion": "Explicit OFFLINE environment: rpu.dat > master.dat plus saved item overlays. Other mods, loose files, runtime hooks, historical provenance and mount order are not authenticated or simulated. Hashes in this example identify the runtime-tested baseline archives; replace only with trusted hashes for your intended environment.",
+  "accept_offline_assumptions": false
+}

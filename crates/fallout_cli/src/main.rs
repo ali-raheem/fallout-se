@@ -60,10 +60,46 @@ struct RemoveItemArg {
 
 #[derive(Debug, Subcommand)]
 enum CommandSet {
+    /// Experimental offline RPU quantity edit; always creates a new candidate.
+    ExperimentalRpuEditQuantity(ExperimentalRpuArgs),
     Debug {
         #[command(subcommand)]
         command: DebugSubcommand,
     },
+}
+
+#[derive(Debug, Args)]
+struct ExperimentalRpuArgs {
+    #[arg(long)]
+    save: PathBuf,
+    #[arg(long)]
+    game_dir: PathBuf,
+    /// JSON source plan, archive paths relative to game-dir, highest priority first.
+    #[arg(long)]
+    source_plan: PathBuf,
+    /// Zero-based indices separated by dots, e.g. 1 or 0.2.
+    #[arg(long, required=true, value_delimiter='.', num_args=1, value_parser=parse_inventory_path)]
+    object_path: Vec<usize>,
+    #[arg(long)]
+    expected_pid: i32,
+    #[arg(long)]
+    expected_object_id: i32,
+    #[arg(long, allow_hyphen_values = true)]
+    expected_quantity: i32,
+    #[arg(long, allow_hyphen_values = true)]
+    new_quantity: i32,
+    #[arg(long)]
+    output: PathBuf,
+    #[arg(long, required = true)]
+    experimental_consent: bool,
+    /// Complete in-memory experiment and destination checks without writing files.
+    #[arg(long)]
+    dry_run: bool,
+}
+fn parse_inventory_path(value: &str) -> Result<usize, String> {
+    value
+        .parse()
+        .map_err(|_| "object-path must contain zero-based integer indices".into())
 }
 
 #[derive(Debug, Subcommand)]
@@ -959,6 +995,31 @@ fn main() {
 
 fn run_command(command: CommandSet) -> i32 {
     match command {
+        CommandSet::ExperimentalRpuEditQuantity(args) => {
+            let request = fallout_core::core_api::experimental_rpu::Request {
+                save: args.save,
+                game_dir: args.game_dir,
+                source_plan: args.source_plan,
+                output: args.output,
+                object_path: args.object_path,
+                expected_pid: args.expected_pid,
+                expected_object_id: args.expected_object_id,
+                expected_quantity: args.expected_quantity,
+                new_quantity: args.new_quantity,
+                experimental_consent: args.experimental_consent,
+                dry_run: args.dry_run,
+            };
+            match fallout_core::core_api::experimental_rpu::run(request) {
+                Ok(report) => {
+                    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                    0
+                }
+                Err(error) => {
+                    eprintln!("Experimental RPU command rejected: {error}");
+                    1
+                }
+            }
+        }
         CommandSet::Debug { command } => run_debug(command),
     }
 }

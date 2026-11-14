@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Cursor;
 
+use crate::common::derived_i32;
+
 use crate::fallout1;
 use crate::fallout1::types as f1_types;
 use crate::fallout2;
@@ -14,6 +16,10 @@ use super::types::{
 };
 use super::{ItemCatalog, TraitCatalog};
 
+// Read-only ownership foundation; not wired into public Session mutation paths.
+#[allow(dead_code)]
+pub(crate) mod coordinator;
+
 const STAT_AGE_INDEX: usize = 33;
 const STAT_GENDER_INDEX: usize = 34;
 const GAME_TIME_TICKS_PER_YEAR: u32 = 315_360_000;
@@ -23,13 +29,13 @@ const TRAIT_SLOT_COUNT: usize = 2;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Engine;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum LoadedDocument {
     Fallout1(Box<fallout1::Document>),
     Fallout2(Box<fallout2::Document>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Session {
     game: Game,
     snapshot: Snapshot,
@@ -88,6 +94,15 @@ impl Engine {
 }
 
 impl Session {
+    /// Inspect editor roundtrip fidelity without changing this session.
+    /// An empty report does not establish game validity or derived arithmetic safety.
+    pub fn roundtrip_diagnostics(&self) -> super::RoundtripReport {
+        match &self.document {
+            LoadedDocument::Fallout1(doc) => super::roundtrip::inspect_fallout1(doc),
+            LoadedDocument::Fallout2(doc) => super::roundtrip::inspect_fallout2(doc),
+        }
+    }
+
     pub fn game(&self) -> Game {
         self.game
     }
@@ -100,6 +115,8 @@ impl Session {
         &self.capabilities
     }
 
+    /// Export raw values unchanged. Derived i32 results saturate at their type
+    /// bounds after wide calculation; existing skill display caps still apply.
     pub fn export_character(&self) -> CharacterExport {
         let snapshot = self.snapshot();
         CharacterExport {
@@ -133,6 +150,22 @@ impl Session {
     }
 
     pub fn apply_character(&mut self, character: &CharacterExport) -> Result<(), CoreError> {
+        // Validate existing edits, then deep-copy the owned state so staging
+        // preserves both the original byte baseline and all unsaved edits.
+        self.to_bytes_modified()?;
+        let mut staged = self.clone();
+
+        staged.apply_character_inner(character)?;
+
+        // Validate that the resulting document can be serialized.
+        staged.to_bytes_modified()?;
+
+        // Commit only after all operations succeed.
+        *self = staged;
+        Ok(())
+    }
+
+    fn apply_character_inner(&mut self, character: &CharacterExport) -> Result<(), CoreError> {
         if character.game != self.game {
             return Err(CoreError::new(
                 CoreErrorCode::UnsupportedOperation,
@@ -263,7 +296,7 @@ impl Session {
                         name: (*name).to_string(),
                         raw,
                         tag_bonus,
-                        bonus: total - raw,
+                        bonus: derived_i32(i128::from(total) - i128::from(raw)),
                         total,
                     });
                 }
@@ -281,7 +314,7 @@ impl Session {
                         name: (*name).to_string(),
                         raw,
                         tag_bonus,
-                        bonus: total - raw,
+                        bonus: derived_i32(i128::from(total) - i128::from(raw)),
                         total,
                     });
                 }
@@ -443,9 +476,10 @@ impl Session {
         self.stat(7).total
     }
 
+    /// Compute the threshold in wide arithmetic, saturating the returned i32.
     pub fn next_level_xp(&self) -> i32 {
-        let l = self.snapshot.level;
-        (l + 1) * l / 2 * 1000
+        let l = i128::from(self.snapshot.level);
+        derived_i32((l + 1) * l / 2 * 1000)
     }
 
     pub fn stat(&self, index: usize) -> StatEntry {
@@ -1053,7 +1087,7 @@ fn collect_stat_entries(
     for index in indices {
         let base = base_stats[index];
         let bonus = bonus_stats[index];
-        let total = base + bonus;
+        let total = derived_i32(i128::from(base) + i128::from(bonus));
 
         if hide_zero_totals && total == 0 && bonus == 0 {
             continue;
@@ -1075,12 +1109,11 @@ fn total_for_stat(index: usize, base: i32, bonus: i32, game_time: u32) -> i32 {
         return effective_age_total(base, bonus, game_time);
     }
 
-    base + bonus
+    derived_i32(i128::from(base) + i128::from(bonus))
 }
 
 fn effective_age_total(base: i32, bonus: i32, game_time: u32) -> i32 {
-    base.saturating_add(bonus)
-        .saturating_add(elapsed_game_years(game_time))
+    derived_i32(i128::from(base) + i128::from(bonus) + i128::from(elapsed_game_years(game_time)))
 }
 
 fn elapsed_game_years(game_time: u32) -> i32 {
@@ -1119,5 +1152,101 @@ fn perk_count_for_game(game: Game) -> usize {
     match game {
         Game::Fallout1 => f1_types::PERK_NAMES.len(),
         Game::Fallout2 => f2_types::PERK_NAMES.len(),
+    }
+}
+
+#[cfg(test)]
+mod arithmetic_tests {
+    use super::*;
+
+    fn extreme_session(game: Game, base: i32, bonus: i32, skill: i32, level: i32) -> Session {
+        // Populate raw models directly so layout heuristics do not restrict the
+        // arithmetic input matrix. Only reads fixtures; no stored bytes are patched.
+        macro_rules! prepare {
+            ($doc:ident) => {
+                $doc.save.critter_data.base_stats.fill(base);
+                $doc.save.critter_data.bonus_stats.fill(bonus);
+                $doc.save.critter_data.skills.fill(skill);
+                $doc.save.pc_stats.level = level;
+                $doc.save.header.game_time = u32::MAX;
+                $doc.save.perks.fill(0);
+                $doc.save.selected_traits = [-1, -1];
+                $doc.save.tagged_skills = [0, -1, -1, -1];
+            };
+        }
+        match game {
+            Game::Fallout1 => {
+                let mut doc = fallout1::Document::parse_with_layout(Cursor::new(include_bytes!(
+                    "../../../../tests/fallout1_examples/SAVEGAME/SLOT01/SAVE.DAT"
+                )))
+                .unwrap();
+                prepare!(doc);
+                session_from_fallout1(doc)
+            }
+            Game::Fallout2 => {
+                let mut doc = fallout2::Document::parse_with_layout(Cursor::new(include_bytes!(
+                    "../../../../tests/fallout2_examples/SLOT01/SAVE.DAT"
+                )))
+                .unwrap();
+                prepare!(doc);
+                doc.save.game_difficulty = 1;
+                session_from_fallout2(doc)
+            }
+        }
+    }
+
+    fn clamp(value: i128) -> i32 {
+        value.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+    }
+
+    #[test]
+    fn raw_extreme_combinations_use_wide_intermediates_and_clamp_only_results() {
+        for game in [Game::Fallout1, Game::Fallout2] {
+            for base in [i32::MIN, -1, 0, i32::MAX] {
+                for bonus in [i32::MIN, -1, 0, i32::MAX] {
+                    for raw in [i32::MIN, 0, i32::MAX] {
+                        let session = extreme_session(game, base, bonus, raw, i32::MAX);
+                        let before = session.to_bytes_modified().unwrap();
+                        let export = session.export_character();
+                        let sum = i128::from(base) + i128::from(bonus);
+                        assert_eq!(session.stat(6).total, clamp(sum));
+                        assert_eq!(session.special_stats()[6].total, clamp(sum));
+                        assert_eq!(session.max_hp(), clamp(sum));
+                        assert_eq!(
+                            session.age(),
+                            clamp(sum + i128::from(u32::MAX / GAME_TIME_TICKS_PER_YEAR))
+                        );
+                        assert_eq!(session.snapshot().level, i32::MAX);
+                        let (default, multiplier, cap) = match game {
+                            Game::Fallout1 => (35, 1, 200),
+                            Game::Fallout2 => (5, 4, 300),
+                        };
+                        let expected_skill =
+                            clamp((default + sum * multiplier + i128::from(raw) * 2 + 20).min(cap));
+                        assert_eq!(export.skills[0].total, expected_skill);
+                        assert_eq!(export.skills[0].raw, raw);
+                        assert_eq!(export.skills[0].tag_bonus, clamp(i128::from(raw) + 20));
+                        assert_eq!(
+                            export.skills[0].bonus,
+                            clamp(i128::from(expected_skill) - i128::from(raw))
+                        );
+                        assert_eq!(session.all_derived_stats(), export.stats);
+                        assert!(session.to_bytes_modified().unwrap() == before);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn next_level_xp_handles_extremes_and_intermediate_overflow() {
+        for game in [Game::Fallout1, Game::Fallout2] {
+            for level in [i32::MIN, -2, -1, 0, 1, 99, 100, 2071, 2072, i32::MAX] {
+                let session = extreme_session(game, 1, 0, 0, level);
+                let wide = i128::from(level);
+                assert_eq!(session.next_level_xp(), clamp((wide + 1) * wide / 2 * 1000));
+                assert_eq!(session.export_character().level, level);
+            }
+        }
     }
 }

@@ -46,7 +46,10 @@ pub fn patch_fixed_string(
     if raw.len() > width {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{field_label} is too long: {} bytes (max {width} bytes)", raw.len()),
+            format!(
+                "{field_label} is too long: {} bytes (max {width} bytes)",
+                raw.len()
+            ),
         ));
     }
     if bytes.len() < offset + width {
@@ -83,7 +86,14 @@ pub fn patch_fixed_string_in_blob(
     section_label: &str,
     field_label: &str,
 ) -> io::Result<()> {
-    patch_fixed_string(&mut blob.bytes, offset, width, value, section_label, field_label)
+    patch_fixed_string(
+        &mut blob.bytes,
+        offset,
+        width,
+        value,
+        section_label,
+        field_label,
+    )
 }
 
 #[cfg(test)]
